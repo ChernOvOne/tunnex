@@ -1,0 +1,582 @@
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../core/model/server_config.dart';
+import '../../core/ping/server_ping.dart';
+import '../../data/preferences/app_preferences.dart';
+import '../../data/providers.dart';
+import '../../data/repository/server_repository.dart';
+import '../../vpn/traffic_stats.dart';
+import '../../vpn/vpn_service.dart';
+import '../components/qr_scanner_screen.dart';
+import '../components/qr_share_dialog.dart';
+import '../components/connect_button.dart';
+import '../components/server_card.dart';
+import '../components/subscription_card.dart';
+import '../theme/app_theme.dart';
+
+class HomeScreen extends ConsumerWidget {
+  const HomeScreen({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final vpnState = ref.watch(vpnStateProvider);
+    final activeSub = ref.watch(activeSubscriptionProvider);
+    final servers = ref.watch(filteredServersProvider);
+    final selectedId = ref.watch(selectedServerIdProvider);
+    final selectedServer = ref.watch(selectedServerProvider);
+
+    return CustomScrollView(
+      slivers: [
+        SliverAppBar(
+          floating: true,
+          centerTitle: true,
+          title: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                    colors: [AppColors.primary, AppColors.accent],
+                  ),
+                ),
+                child: const Icon(Icons.shield_rounded,
+                    size: 16, color: Colors.white),
+              ),
+              const SizedBox(width: 8),
+              const Text('Tunnex'),
+            ],
+          ),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.add_circle_outline, size: 26),
+              onPressed: () => _showAddSubscriptionDialog(context, ref),
+              tooltip: 'Добавить подписку',
+            ),
+          ],
+        ),
+
+        // Subscription card
+        if (activeSub != null)
+          SliverToBoxAdapter(
+            child: SubscriptionCard(
+              subscription: activeSub,
+              isActive: true,
+              onRefresh: () {
+                ref.read(subscriptionsProvider.notifier).refresh(activeSub.id);
+              },
+              onShare: () => QrShareDialog.show(
+                context,
+                data: activeSub.url,
+                title: activeSub.name,
+              ),
+            ),
+          ),
+
+        // Connect section
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20),
+            child: Column(
+              children: [
+                // Status text
+                Text(
+                  _statusText(vpnState),
+                  style: TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 0.5,
+                    color: vpnState == VpnState.connected
+                        ? AppColors.success
+                        : vpnState == VpnState.connecting
+                            ? AppColors.warning
+                            : AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Connect button
+                ConnectButton(
+                  isConnected: vpnState == VpnState.connected,
+                  isConnecting: vpnState == VpnState.connecting ||
+                      vpnState == VpnState.disconnecting,
+                  onTap: () => _toggleVpn(context, ref, vpnState),
+                ),
+                const SizedBox(height: 16),
+
+                // Selected server name
+                if (selectedServer != null)
+                  Column(
+                    children: [
+                      Text(
+                        selectedServer.remarks.isNotEmpty
+                            ? selectedServer.remarks
+                            : '${selectedServer.address}:${selectedServer.port}',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${selectedServer.protocol.displayName} • ${selectedServer.network}',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  )
+                else
+                  const Text(
+                    'Сервер не выбран',
+                    style: TextStyle(fontSize: 14, color: AppColors.textMuted),
+                  ),
+              ],
+            ),
+          ),
+        ),
+
+        // Speed display (when connected)
+        if (vpnState == VpnState.connected)
+          SliverToBoxAdapter(
+            child: _TrafficDisplay(),
+          ),
+
+        // Server list header
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 24, 16, 8),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Серверы (${servers.length})',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                Row(
+                  children: [
+                    // Ping all
+                    TextButton.icon(
+                      onPressed: servers.isNotEmpty
+                          ? () => _pingAll(context, ref, servers)
+                          : null,
+                      icon: const Icon(Icons.speed, size: 18),
+                      label: const Text('Тест'),
+                      style: TextButton.styleFrom(
+                          foregroundColor: AppColors.textSecondary),
+                    ),
+                    // Auto-select
+                    TextButton.icon(
+                      onPressed: servers.isNotEmpty
+                          ? () => _autoSelect(context, ref, servers)
+                          : null,
+                      icon: const Icon(Icons.flash_on, size: 18),
+                      label: const Text('Авто'),
+                      style: TextButton.styleFrom(
+                          foregroundColor: AppColors.accent),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        // Empty state
+        if (servers.isEmpty)
+          const SliverToBoxAdapter(
+            child: Padding(
+              padding: EdgeInsets.all(40),
+              child: Column(
+                children: [
+                  Icon(Icons.dns_outlined, size: 48, color: AppColors.textMuted),
+                  SizedBox(height: 12),
+                  Text(
+                    'Нет серверов',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    'Добавьте подписку для начала работы',
+                    style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+          )
+        else
+          SliverList(
+            delegate: SliverChildBuilderDelegate(
+              (context, index) {
+                final server = servers[index];
+                return ServerCard(
+                  server: server,
+                  isSelected: server.id == selectedId,
+                  onTap: () => _selectServer(context, ref, server.id),
+                );
+              },
+              childCount: servers.length,
+            ),
+          ),
+
+        const SliverPadding(padding: EdgeInsets.only(bottom: 100)),
+      ],
+    );
+  }
+
+  String _statusText(VpnState state) {
+    switch (state) {
+      case VpnState.disconnected:
+        return 'ОТКЛЮЧЕНО';
+      case VpnState.connecting:
+        return 'ПОДКЛЮЧЕНИЕ...';
+      case VpnState.connected:
+        return 'ПОДКЛЮЧЕНО';
+      case VpnState.disconnecting:
+        return 'ОТКЛЮЧЕНИЕ...';
+    }
+  }
+
+  void _toggleVpn(BuildContext context, WidgetRef ref, VpnState currentState) {
+    if (currentState == VpnState.connected ||
+        currentState == VpnState.connecting) {
+      ref.read(vpnStateProvider.notifier).disconnect();
+      return;
+    }
+
+    final vpnData = ref.read(vpnConfigProvider);
+    if (vpnData == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Выберите сервер для подключения'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final prefs = ref.read(appPreferencesProvider);
+    ref.read(vpnStateProvider.notifier).connect(
+          vpnData['config']!,
+          core: vpnData['core']!,
+          splitBypass: prefs.splitTunnelBypassMode,
+          splitApps: prefs.splitTunnelApps,
+        );
+  }
+
+  void _selectServer(BuildContext context, WidgetRef ref, String serverId) {
+    final vpnState = ref.read(vpnStateProvider);
+    ref.read(selectedServerIdProvider.notifier).state = serverId;
+    ref.read(appPreferencesProvider).setSelectedServerId(serverId);
+
+    // Auto-connect or reconnect
+    if (vpnState == VpnState.connected || vpnState == VpnState.connecting) {
+      // Reconnect with new server
+      ref.read(vpnStateProvider.notifier).disconnect();
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _toggleVpn(context, ref, VpnState.disconnected);
+      });
+    } else {
+      // Auto-connect
+      _toggleVpn(context, ref, VpnState.disconnected);
+    }
+  }
+
+  PingMethod _getCurrentPingMethod(WidgetRef ref) {
+    final name = ref.read(appPreferencesProvider).pingMethod;
+    return PingMethod.values.firstWhere(
+      (m) => m.name == name,
+      orElse: () => PingMethod.tcp,
+    );
+  }
+
+  void _autoSelect(BuildContext context, WidgetRef ref, List<ServerConfig> servers) async {
+    if (servers.isEmpty) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Поиск лучшего сервера...'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    // Ping all servers with selected method
+    final method = _getCurrentPingMethod(ref);
+    final results = await ServerPing.pingAll(servers, method: method, timeoutMs: 3000);
+    final repo = ref.read(serverRepositoryProvider);
+
+    // Update ping results
+    for (final entry in results.entries) {
+      final s = servers.where((s) => s.id == entry.key).firstOrNull;
+      if (s != null) await repo.update(s.copyWith(testResult: entry.value));
+    }
+    ref.invalidate(serversProvider);
+
+    // Pick fastest alive server
+    final alive = results.entries
+        .where((e) => e.value > 0)
+        .toList()
+      ..sort((a, b) => a.value.compareTo(b.value));
+
+    if (alive.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Нет доступных серверов'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    final bestId = alive.first.key;
+    final best = servers.firstWhere((s) => s.id == bestId);
+
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Лучший: ${best.remarks.isNotEmpty ? best.remarks : best.address} (${alive.first.value}мс)'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      // Auto-connect to best server
+      _selectServer(context, ref, bestId);
+    }
+  }
+
+  void _pingAll(BuildContext context, WidgetRef ref, List<ServerConfig> servers) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Тестирование серверов...'),
+        behavior: SnackBarBehavior.floating,
+        duration: Duration(seconds: 1),
+      ),
+    );
+
+    final method = _getCurrentPingMethod(ref);
+    final results = await ServerPing.pingAll(servers, method: method);
+    final repo = ref.read(serverRepositoryProvider);
+
+    for (final entry in results.entries) {
+      final server = servers.where((s) => s.id == entry.key).firstOrNull;
+      if (server != null) {
+        await repo.update(server.copyWith(testResult: entry.value));
+      }
+    }
+
+    ref.invalidate(serversProvider);
+  }
+
+  void _showAddSubscriptionDialog(BuildContext context, WidgetRef ref) {
+    final urlController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Добавить подписку'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Вставьте ссылку на подписку от провайдера',
+              style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: urlController,
+              decoration: const InputDecoration(
+                hintText: 'https://...',
+                hintStyle: TextStyle(color: AppColors.textMuted),
+              ),
+              style: const TextStyle(color: AppColors.textPrimary),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      final data = await Clipboard.getData('text/plain');
+                      if (data?.text != null) urlController.text = data!.text!;
+                    },
+                    icon: const Icon(Icons.content_paste, size: 18),
+                    label: const Text('Буфер'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
+                      side: const BorderSide(color: AppColors.surfaceLight),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () async {
+                      Navigator.pop(ctx);
+                      final result = await Navigator.push<String>(
+                        context,
+                        MaterialPageRoute(builder: (_) => const QrScannerScreen()),
+                      );
+                      if (result != null && context.mounted) {
+                        ref.read(subscriptionsProvider.notifier).add(result);
+                      }
+                    },
+                    icon: const Icon(Icons.qr_code_scanner, size: 18),
+                    label: const Text('QR'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.textSecondary,
+                      side: const BorderSide(color: AppColors.surfaceLight),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final url = urlController.text.trim();
+              if (url.isEmpty) return;
+              Navigator.pop(ctx);
+              final error = await ref.read(subscriptionsProvider.notifier).add(url);
+              if (error != null && context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(error)),
+                );
+              }
+            },
+            child: const Text('Добавить'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TrafficDisplay extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stats = ref.watch(trafficStatsProvider);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          children: [
+            // Speed row
+            Row(
+              children: [
+                Expanded(
+                  child: _speedItem(
+                    Icons.arrow_upward_rounded,
+                    'Отправка',
+                    _formatSpeed(stats.uploadSpeed),
+                    AppColors.accent,
+                  ),
+                ),
+                const SizedBox(
+                  height: 36,
+                  child: VerticalDivider(color: AppColors.surfaceLight, width: 1),
+                ),
+                Expanded(
+                  child: _speedItem(
+                    Icons.arrow_downward_rounded,
+                    'Загрузка',
+                    _formatSpeed(stats.downloadSpeed),
+                    AppColors.success,
+                  ),
+                ),
+              ],
+            ),
+            // Session total
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.surfaceLight,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.data_usage, size: 14, color: AppColors.textMuted),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Сессия: ↑ ${_formatBytes(stats.totalUpload)}  ↓ ${_formatBytes(stats.totalDownload)}',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _speedItem(IconData icon, String label, String value, Color color) {
+    return Column(
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(fontSize: 11, color: color)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
+          ),
+        ),
+      ],
+    );
+  }
+
+  static String _formatSpeed(int bytesPerSec) {
+    if (bytesPerSec < 1024) return '$bytesPerSec Б/с';
+    if (bytesPerSec < 1024 * 1024) {
+      return '${(bytesPerSec / 1024).toStringAsFixed(1)} КБ/с';
+    }
+    return '${(bytesPerSec / (1024 * 1024)).toStringAsFixed(1)} МБ/с';
+  }
+
+  static String _formatBytes(int bytes) {
+    if (bytes < 1024) return '$bytes Б';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} КБ';
+    if (bytes < 1024 * 1024 * 1024) {
+      return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} МБ';
+    }
+    return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} ГБ';
+  }
+}
