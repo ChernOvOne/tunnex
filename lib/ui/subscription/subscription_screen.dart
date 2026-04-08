@@ -74,10 +74,19 @@ class SubscriptionScreen extends ConsumerWidget {
                         .read(appPreferencesProvider)
                         .setSelectedSubscriptionId(sub.id);
                   },
-                  onRefresh: () {
-                    ref
-                        .read(subscriptionsProvider.notifier)
-                        .refresh(sub.id);
+                  onRefresh: () async {
+                    final result = await ref.read(subscriptionsProvider.notifier).refresh(sub.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(result != null
+                              ? 'Обновлено (${result.servers.length} серверов)'
+                              : 'Ошибка обновления'),
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                    }
                   },
                   onShare: () => QrShareDialog.show(context, data: sub.url, title: sub.name),
                   onDelete: () => _confirmDelete(context, ref, sub.id, sub.name),

@@ -26,12 +26,19 @@ class SubscriptionsNotifier extends StateNotifier<List<Subscription>> {
   final _fetcher = SubscriptionFetcher();
 
   SubscriptionsNotifier(this._ref) : super([]) {
-    _load();
+    _load().then((_) => _autoRefresh());
   }
 
   Future<void> _load() async {
     final repo = _ref.read(subscriptionRepositoryProvider);
     state = await repo.getAll();
+  }
+
+  /// Auto-refresh all subscriptions on app start
+  Future<void> _autoRefresh() async {
+    for (final sub in state) {
+      await refresh(sub.id);
+    }
   }
 
   Future<String?> add(String url) async {

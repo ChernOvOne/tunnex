@@ -10,7 +10,7 @@ class XrayConfig {
     String dnsServer = '8.8.8.8',
   }) {
     return {
-      'log': {'loglevel': 'warning'},
+      'log': {'loglevel': 'info'},
       'inbounds': [
         // TUN inbound only — NO SOCKS5 proxy (CVE: SOCKS5 without auth
         // allows any app on device to discover VPN server IP and leak traffic)
@@ -36,9 +36,10 @@ class XrayConfig {
       ],
       'dns': {
         'servers': [
-          dnsServer,
+          // Use plain DNS for xray (DoH needs bootstrap resolver)
+          _plainDns(dnsServer),
           {
-            'address': dnsServer,
+            'address': _plainDns(dnsServer),
             'domains': ['geosite:geolocation-!cn'],
           },
         ],
@@ -61,6 +62,15 @@ class XrayConfig {
         },
       },
     };
+  }
+
+  /// Convert DoH/DoT to plain DNS IP for xray compatibility
+  static String _plainDns(String dns) {
+    if (dns.startsWith('https://dns.google')) return '8.8.8.8';
+    if (dns.startsWith('https://cloudflare')) return '1.1.1.1';
+    if (dns.startsWith('https://dns.quad9')) return '9.9.9.9';
+    if (dns.startsWith('https://') || dns.startsWith('tls://')) return '8.8.8.8';
+    return dns;
   }
 
   static Map<String, dynamic> _buildOutbound(ServerConfig server) {

@@ -114,6 +114,7 @@ install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/xray/"
   FILES_MATCHING
   PATTERN "xray.exe"
   PATTERN "wintun.dll"
+  PATTERN "tun2socks-windows-amd64.exe"
   PATTERN "geoip.dat"
   PATTERN "geosite.dat"
 )

@@ -74,6 +74,7 @@ class AppTheme {
       ),
       scaffoldBackgroundColor: AppColors.background,
       cardColor: AppColors.card,
+      fontFamilyFallback: const ['Segoe UI Emoji', 'Noto Color Emoji', 'Apple Color Emoji'],
       textTheme: GoogleFonts.interTextTheme(
         const TextTheme(
           headlineLarge: TextStyle(

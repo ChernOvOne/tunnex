@@ -33,6 +33,12 @@ class SubscriptionCard extends StatelessWidget {
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} GB';
   }
 
+  String _formatExpiry(int epochSec) {
+    if (epochSec <= 0) return '';
+    final dt = DateTime.fromMillisecondsSinceEpoch(epochSec * 1000);
+    return '${dt.day.toString().padLeft(2, '0')}.${dt.month.toString().padLeft(2, '0')}.${dt.year}';
+  }
+
   String _formatDate(int epochMs) {
     if (epochMs <= 0) return '';
     final dt = DateTime.fromMillisecondsSinceEpoch(epochMs);
@@ -99,6 +105,14 @@ class SubscriptionCard extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (subscription.lastUpdated > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 4),
+                      child: Text(
+                        _formatDate(subscription.lastUpdated),
+                        style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+                      ),
+                    ),
                   if (onRefresh != null)
                     IconButton(
                       icon: const Icon(Icons.refresh,
@@ -202,10 +216,10 @@ class SubscriptionCard extends StatelessWidget {
                           ? AppColors.error
                           : AppColors.accent,
                     ),
-                  if (subscription.lastUpdated > 0)
+                  if (subscription.expireTimestamp > 0)
                     _chip(
-                      _formatDate(subscription.lastUpdated),
-                      AppColors.textMuted,
+                      'до ${_formatExpiry(subscription.expireTimestamp)}',
+                      AppColors.textSecondary,
                     ),
                 ],
               ),

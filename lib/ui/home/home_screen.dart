@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -19,6 +21,9 @@ import '../theme/app_theme.dart';
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 
+  bool _isDesktop(BuildContext context) =>
+      MediaQuery.of(context).size.width > 800;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final vpnState = ref.watch(vpnStateProvider);
@@ -26,6 +31,10 @@ class HomeScreen extends ConsumerWidget {
     final servers = ref.watch(filteredServersProvider);
     final selectedId = ref.watch(selectedServerIdProvider);
     final selectedServer = ref.watch(selectedServerProvider);
+
+    if (_isDesktop(context)) {
+      return _buildDesktopLayout(context, ref, vpnState, activeSub, servers, selectedId, selectedServer);
+    }
 
     return CustomScrollView(
       slivers: [
@@ -66,9 +75,7 @@ class HomeScreen extends ConsumerWidget {
             child: SubscriptionCard(
               subscription: activeSub,
               isActive: true,
-              onRefresh: () {
-                ref.read(subscriptionsProvider.notifier).refresh(activeSub.id);
-              },
+              onRefresh: () => _refreshSub(context, ref, activeSub.id),
               onShare: () => QrShareDialog.show(
                 context,
                 data: activeSub.url,
@@ -83,18 +90,40 @@ class HomeScreen extends ConsumerWidget {
             padding: const EdgeInsets.symmetric(vertical: 20),
             child: Column(
               children: [
-                // Status text
-                Text(
-                  _statusText(vpnState),
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 0.5,
-                    color: vpnState == VpnState.connected
-                        ? AppColors.success
-                        : vpnState == VpnState.connecting
-                            ? AppColors.warning
-                            : AppColors.textMuted,
+                // Status with animation
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: Row(
+                    key: ValueKey(vpnState),
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (vpnState == VpnState.connecting || vpnState == VpnState.disconnecting)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 8),
+                          child: SizedBox(
+                            width: 16, height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                          ),
+                        ),
+                      if (vpnState == VpnState.connected)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 6),
+                          child: Icon(Icons.check_circle, size: 18, color: AppColors.success),
+                        ),
+                      Text(
+                        _statusText(vpnState),
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                          letterSpacing: 0.5,
+                          color: vpnState == VpnState.connected
+                              ? AppColors.success
+                              : vpnState == VpnState.connecting
+                                  ? AppColors.accent
+                                  : AppColors.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -279,6 +308,151 @@ class HomeScreen extends ConsumerWidget {
         );
   }
 
+  Widget _buildDesktopLayout(BuildContext context, WidgetRef ref, VpnState vpnState, dynamic activeSub, List<ServerConfig> servers, String? selectedId, ServerConfig? selectedServer) {
+    return Row(
+      children: [
+        // LEFT: Subscription + Servers list
+        Expanded(
+          flex: 5,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Full subscription card (same as mobile)
+              if (activeSub != null)
+                SubscriptionCard(
+                  subscription: activeSub,
+                  isActive: true,
+                  onRefresh: () => _refreshSub(context, ref, activeSub.id),
+                  onShare: () => QrShareDialog.show(context, data: activeSub.url, title: activeSub.name),
+                ),
+              // Server list header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                child: Row(
+                  children: [
+                    Text('Серверы (${servers.length})',
+                        style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.speed, size: 18, color: AppColors.textSecondary),
+                      onPressed: servers.isNotEmpty ? () => _pingAll(context, ref, servers) : null,
+                      tooltip: 'Тест пинга',
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.flash_on, size: 18, color: AppColors.accent),
+                      onPressed: servers.isNotEmpty ? () => _autoSelect(context, ref, servers) : null,
+                      tooltip: 'Авто-выбор',
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline, size: 18),
+                      onPressed: () => _showAddSubscriptionDialog(context, ref),
+                      tooltip: 'Добавить подписку',
+                      visualDensity: VisualDensity.compact,
+                    ),
+                  ],
+                ),
+              ),
+              // Servers
+              Expanded(
+                child: servers.isEmpty
+                    ? const Center(child: Text('Добавьте подписку', style: TextStyle(color: AppColors.textMuted)))
+                    : ListView.builder(
+                        itemCount: servers.length,
+                        padding: const EdgeInsets.only(bottom: 8),
+                        itemBuilder: (context, index) {
+                          final server = servers[index];
+                          return _DesktopServerTile(
+                            server: server,
+                            isSelected: server.id == selectedId,
+                            onTap: () => _selectServer(context, ref, server.id),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+        const VerticalDivider(width: 1, color: AppColors.surfaceLight),
+        // RIGHT: Connect button + server info
+        Expanded(
+          flex: 4,
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Spacer(),
+                // Connect button
+                ConnectButton(
+                  isConnected: vpnState == VpnState.connected,
+                  isConnecting: vpnState == VpnState.connecting || vpnState == VpnState.disconnecting,
+                  onTap: () => _toggleVpn(context, ref, vpnState),
+                ),
+                const SizedBox(height: 16),
+                // Server name
+                if (selectedServer != null) ...[
+                  Text(
+                    selectedServer.remarks.isNotEmpty ? selectedServer.remarks : selectedServer.address,
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: AppColors.textPrimary),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${selectedServer.protocol.displayName} • ${selectedServer.network}',
+                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                  ),
+                ] else
+                  const Text('Выберите сервер', style: TextStyle(color: AppColors.textMuted)),
+                const SizedBox(height: 16),
+                // Status with animation
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 300),
+                  child: Row(
+                    key: ValueKey(vpnState),
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (vpnState == VpnState.connecting || vpnState == VpnState.disconnecting)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 8),
+                          child: SizedBox(
+                            width: 14, height: 14,
+                            child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accent),
+                          ),
+                        ),
+                      if (vpnState == VpnState.connected)
+                        const Padding(
+                          padding: EdgeInsets.only(right: 6),
+                          child: Icon(Icons.check_circle, size: 16, color: AppColors.success),
+                        ),
+                      Text(
+                        _statusText(vpnState),
+                        style: TextStyle(
+                          fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 1,
+                          color: vpnState == VpnState.connected ? AppColors.success
+                              : vpnState == VpnState.connecting ? AppColors.accent
+                              : AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                // Traffic
+                if (vpnState == VpnState.connected) _TrafficDisplay(),
+                const SizedBox(height: 16),
+                // TUN / Proxy toggle (Windows)
+                if (Platform.isWindows) _WindowsModeToggle(),
+                const Spacer(),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   void _selectServer(BuildContext context, WidgetRef ref, String serverId) {
     final vpnState = ref.read(vpnStateProvider);
     ref.read(selectedServerIdProvider.notifier).state = serverId;
@@ -385,6 +559,32 @@ class HomeScreen extends ConsumerWidget {
     ref.invalidate(serversProvider);
   }
 
+  void _refreshSub(BuildContext context, WidgetRef ref, String subId) async {
+    final result = await ref.read(subscriptionsProvider.notifier).refresh(subId);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(
+                result != null ? Icons.check_circle : Icons.error_outline,
+                color: result != null ? AppColors.success : AppColors.error,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(result != null
+                  ? 'Подписка обновлена (${result.servers.length} серверов)'
+                  : 'Не удалось обновить'),
+            ],
+          ),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.surface,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    }
+  }
+
   void _showAddSubscriptionDialog(BuildContext context, WidgetRef ref) {
     final urlController = TextEditingController();
     showDialog(
@@ -473,6 +673,80 @@ class HomeScreen extends ConsumerWidget {
             child: const Text('Добавить'),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Remove emoji that Windows can't render, keep text
+String _cleanServerName(String name) {
+  if (!Platform.isWindows) return name;
+  // Remove surrogate pairs (emoji) but keep basic unicode
+  return name.replaceAll(RegExp(r'[\u{1F000}-\u{1FFFF}]|[\u{2600}-\u{27BF}]|[\u{FE00}-\u{FE0F}]|[\u{1F900}-\u{1F9FF}]|[\u{200D}]|[\u{20E3}]|[\u{E0020}-\u{E007F}]|[\u{FE0F}]', unicode: true), '').trim();
+}
+
+class _DesktopServerTile extends StatelessWidget {
+  final ServerConfig server;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  const _DesktopServerTile({
+    required this.server,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: isSelected ? AppColors.primary.withValues(alpha: 0.12) : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+          border: isSelected ? Border.all(color: AppColors.primary.withValues(alpha: 0.4), width: 1) : null,
+        ),
+        child: Row(
+          children: [
+            // Server name with emoji support
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _cleanServerName(server.remarks.isNotEmpty ? server.remarks : server.address),
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
+                      color: AppColors.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    server.protocol.displayName,
+                    style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                  ),
+                ],
+              ),
+            ),
+            // Ping
+            if (server.testResult > 0)
+              Text(
+                '${server.testResult}ms',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  color: server.testResult < 200 ? AppColors.success
+                      : server.testResult < 500 ? AppColors.warning : AppColors.error,
+                ),
+              ),
+            const SizedBox(width: 4),
+            Icon(Icons.chevron_right, size: 18, color: AppColors.textMuted),
+          ],
+        ),
       ),
     );
   }
@@ -583,5 +857,57 @@ class _TrafficDisplay extends ConsumerWidget {
       return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} МБ';
     }
     return '${(bytes / (1024 * 1024 * 1024)).toStringAsFixed(2)} ГБ';
+  }
+}
+
+class _WindowsModeToggle extends ConsumerWidget {
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final prefs = ref.watch(appPreferencesProvider);
+    final isTun = prefs.windowsVpnMode == 'tun';
+
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _modeButton('Proxy', !isTun, () {
+            prefs.setWindowsVpnMode('systemProxy');
+            (context as Element).markNeedsBuild();
+          }),
+          const SizedBox(width: 4),
+          _modeButton('TUN', isTun, () {
+            prefs.setWindowsVpnMode('tun');
+            (context as Element).markNeedsBuild();
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _modeButton(String label, bool active, VoidCallback onTap) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        decoration: BoxDecoration(
+          color: active ? AppColors.primary : Colors.transparent,
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w600,
+            color: active ? Colors.white : AppColors.textMuted,
+          ),
+        ),
+      ),
+    );
   }
 }

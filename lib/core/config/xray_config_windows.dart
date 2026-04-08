@@ -18,16 +18,23 @@ class XrayConfigWindows {
   }) {
     final config = XrayConfig.generate(server: server, dnsServer: dnsServer);
 
+    // Session password for SOCKS auth
+    final sessPass = _generateSessionPassword();
+
     if (mode == WindowsVpnMode.tun) {
+      // TUN: xray provides SOCKS, tun2socks bridges TUN→SOCKS
       config['inbounds'] = [
         {
-          'tag': 'tun-in',
-          'port': 0,
-          'protocol': 'tun',
+          'tag': 'socks-in',
+          'port': socksPort,
+          'listen': '127.0.0.1',
+          'protocol': 'socks',
           'settings': {
-            'name': 'tunnex-tun',
-            'mtu': 1500,
-            'userLevel': 0,
+            'auth': 'password',
+            'accounts': [
+              {'user': 'tunnex', 'pass': 'tunnex'},
+            ],
+            'udp': true,
           },
           'sniffing': {
             'enabled': true,
