@@ -99,13 +99,6 @@ class SubscriptionCard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  if (onShare != null)
-                    IconButton(
-                      icon: const Icon(Icons.share_outlined,
-                          size: 20, color: AppColors.textSecondary),
-                      onPressed: onShare,
-                      visualDensity: VisualDensity.compact,
-                    ),
                   if (onRefresh != null)
                     IconButton(
                       icon: const Icon(Icons.refresh,
@@ -217,34 +210,74 @@ class SubscriptionCard extends StatelessWidget {
                 ],
               ),
 
-              // Support link
-              if (subscription.supportUrl.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                GestureDetector(
-                  onTap: () {
-                    final uri = Uri.tryParse(subscription.supportUrl);
-                    if (uri != null) {
-                      launcher.launchUrl(uri,
-                          mode: launcher.LaunchMode.externalApplication);
-                    }
-                  },
-                  child: Row(
-                    children: [
-                      const Icon(Icons.support_agent,
-                          size: 16, color: AppColors.accent),
-                      const SizedBox(width: 6),
-                      const Text(
-                        'Написать в поддержку',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.accent,
+              // Action buttons row
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  // Share button
+                  if (onShare != null)
+                    GestureDetector(
+                      onTap: onShare,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.qr_code_2, size: 16, color: AppColors.primary),
+                            SizedBox(width: 6),
+                            Text(
+                              'Поделиться подпиской',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ],
+                    ),
+                  // Support link
+                  if (subscription.supportUrl.isNotEmpty) ...[
+                    const SizedBox(width: 10),
+                    GestureDetector(
+                      onTap: () {
+                        final uri = Uri.tryParse(subscription.supportUrl);
+                        if (uri != null) {
+                          launcher.launchUrl(uri,
+                              mode: launcher.LaunchMode.externalApplication);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.support_agent, size: 16, color: AppColors.accent),
+                            SizedBox(width: 6),
+                            Text(
+                              'Поддержка',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w500,
+                                color: AppColors.accent,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
         ),

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:qr_flutter/qr_flutter.dart';
+import 'package:qr/qr.dart';
 
 import '../theme/app_theme.dart';
 
@@ -15,15 +15,26 @@ class QrShareDialog extends StatelessWidget {
   });
 
   static void show(BuildContext context, {required String data, String? title}) {
+    if (data.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ссылка подписки не найдена'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     showDialog(
       context: context,
-      builder: (_) => QrShareDialog(data: data, title: title ?? 'Поделиться'),
+      builder: (ctx) => QrShareDialog(data: data, title: title ?? 'Поделиться'),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
+      backgroundColor: AppColors.surface,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       title: Row(
         children: [
           ShaderMask(
@@ -37,6 +48,7 @@ class QrShareDialog extends StatelessWidget {
               title,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 18, color: AppColors.textPrimary),
             ),
           ),
         ],
@@ -44,30 +56,30 @@ class QrShareDialog extends StatelessWidget {
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // QR Code
+          // Real QR Code
           Container(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(16),
             ),
-            child: QrImageView(
-              data: data,
-              version: QrVersions.auto,
-              size: 220,
-              backgroundColor: Colors.white,
-              eyeStyle: const QrEyeStyle(
-                eyeShape: QrEyeShape.square,
-                color: Color(0xFF1A1A2E),
-              ),
-              dataModuleStyle: const QrDataModuleStyle(
-                dataModuleShape: QrDataModuleShape.square,
-                color: Color(0xFF1A1A2E),
+            child: SizedBox(
+              width: 220,
+              height: 220,
+              child: CustomPaint(
+                painter: _QrCodePainter(data: data),
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          // URL text (truncated)
+          const SizedBox(height: 12),
+          // Hint
+          const Text(
+            'Отсканируйте QR с другого устройства в Tunnex\nили передайте ссылку — в ней все настройки',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.4),
+          ),
+          const SizedBox(height: 12),
+          // URL
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(12),
@@ -87,7 +99,6 @@ class QrShareDialog extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          // Copy button
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -95,8 +106,9 @@ class QrShareDialog extends StatelessWidget {
                 Clipboard.setData(ClipboardData(text: data));
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                    content: Text('Скопировано'),
+                    content: Text('Ссылка скопирована'),
                     duration: Duration(seconds: 1),
+                    behavior: SnackBarBehavior.floating,
                   ),
                 );
               },
@@ -114,4 +126,36 @@ class QrShareDialog extends StatelessWidget {
       ],
     );
   }
+}
+
+class _QrCodePainter extends CustomPainter {
+  final String data;
+  _QrCodePainter({required this.data});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final qrCode = QrCode.fromData(
+      data: data,
+      errorCorrectLevel: QrErrorCorrectLevel.M,
+    );
+    final qrImage = QrImage(qrCode);
+    final moduleCount = qrCode.moduleCount;
+    final cellSize = size.width / moduleCount;
+
+    final paint = Paint()..color = const Color(0xFF1A1A2E);
+
+    for (int y = 0; y < moduleCount; y++) {
+      for (int x = 0; x < moduleCount; x++) {
+        if (qrImage.isDark(y, x)) {
+          canvas.drawRect(
+            Rect.fromLTWH(x * cellSize, y * cellSize, cellSize, cellSize),
+            paint,
+          );
+        }
+      }
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _QrCodePainter old) => old.data != data;
 }
