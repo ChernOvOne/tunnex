@@ -1,16 +1,17 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../../core/model/server_config.dart';
+import '../../core/security/secure_storage.dart';
 
 final serverRepositoryProvider = Provider<ServerRepository>((ref) {
   return ServerRepository();
 });
 
 class ServerRepository {
+  static const _filename = 'servers.json.enc';
+
   List<ServerConfig> _servers = [];
   bool _loaded = false;
 
@@ -21,16 +22,10 @@ class ServerRepository {
     await load();
   }
 
-  Future<File> get _file async {
-    final dir = await getApplicationDocumentsDirectory();
-    return File('${dir.path}/servers.json');
-  }
-
   Future<void> load() async {
     try {
-      final file = await _file;
-      if (await file.exists()) {
-        final json = await file.readAsString();
+      final json = await SecureStorage.readEncrypted(_filename);
+      if (json != null) {
         final list = jsonDecode(json) as List;
         _servers =
             list.map((e) => ServerConfig.fromJson(e as Map<String, dynamic>)).toList();
@@ -42,8 +37,10 @@ class ServerRepository {
   }
 
   Future<void> _save() async {
-    final file = await _file;
-    await file.writeAsString(jsonEncode(_servers.map((s) => s.toJson()).toList()));
+    await SecureStorage.writeEncrypted(
+      _filename,
+      jsonEncode(_servers.map((s) => s.toJson()).toList()),
+    );
   }
 
   Future<List<ServerConfig>> getAll() async {

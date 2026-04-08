@@ -413,7 +413,11 @@ class HomeScreen extends ConsumerWidget {
                   child: OutlinedButton.icon(
                     onPressed: () async {
                       final data = await Clipboard.getData('text/plain');
-                      if (data?.text != null) urlController.text = data!.text!;
+                      if (data?.text != null) {
+                        urlController.text = data!.text!;
+                        // Clear clipboard for security
+                        Clipboard.setData(const ClipboardData(text: ''));
+                      }
                     },
                     icon: const Icon(Icons.content_paste, size: 18),
                     label: const Text('Буфер'),

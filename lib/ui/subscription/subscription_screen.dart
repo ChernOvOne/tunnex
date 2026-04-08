@@ -131,6 +131,7 @@ class SubscriptionScreen extends ConsumerWidget {
                       final data = await Clipboard.getData('text/plain');
                       if (data?.text != null) {
                         urlController.text = data!.text!;
+                        Clipboard.setData(const ClipboardData(text: ''));
                       }
                     },
                     icon: const Icon(Icons.content_paste, size: 18),

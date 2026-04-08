@@ -12,7 +12,8 @@ class XrayConfig {
     return {
       'log': {'loglevel': 'warning'},
       'inbounds': [
-        // TUN inbound
+        // TUN inbound only — NO SOCKS5 proxy (CVE: SOCKS5 without auth
+        // allows any app on device to discover VPN server IP and leak traffic)
         {
           'tag': 'tun',
           'port': 0,
@@ -25,19 +26,6 @@ class XrayConfig {
           'sniffing': {
             'enabled': true,
             'destOverride': ['http', 'tls'],
-          },
-        },
-        // SOCKS inbound (local proxy)
-        {
-          'tag': 'socks',
-          'port': 10808,
-          'listen': '127.0.0.1',
-          'protocol': 'socks',
-          'settings': {'auth': 'noauth', 'udp': true},
-          'sniffing': {
-            'enabled': true,
-            'destOverride': ['http', 'tls'],
-            'routeOnly': true,
           },
         },
       ],

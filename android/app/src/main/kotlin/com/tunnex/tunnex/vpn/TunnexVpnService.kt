@@ -48,7 +48,7 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
                         context.assets.open(name).use { input ->
                             outFile.outputStream().use { output -> input.copyTo(output) }
                         }
-                        Log.d(TAG, "Copied asset: $name")
+                        // no debug log in release
                     } catch (_: Exception) {}
                 }
             }
@@ -127,7 +127,7 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
 
         withContext(Dispatchers.Main) { acquireLocks() }
 
-        Log.i(TAG, "Starting xray core, fd=$fd")
+        Log.i(TAG, "Starting VPN core")
         val controller = Libv2ray.newCoreController(this)
         controller.startLoop(config, fd.toInt())
         coreController = controller
@@ -145,9 +145,9 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
             setState("connected")
         }
 
+        // Only save connection state, NOT the config (contains server credentials)
         getSharedPreferences("tunnex_vpn", MODE_PRIVATE).edit()
             .putBoolean("was_connected", true)
-            .putString("last_config", config)
             .apply()
     }
 
@@ -177,7 +177,7 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
                 builder.setMetered(false)
             }
 
-            Log.i(TAG, "TUN: bypass=$splitBypass, apps=${splitApps.size}")
+            Log.i(TAG, "TUN configured")
             vpnInterface = builder.establish()
             return vpnInterface?.fd?.toLong() ?: -1L
         } catch (e: Exception) {
@@ -224,9 +224,7 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
         return try {
             val up = controller.queryStats("proxy", "uplink")
             val down = controller.queryStats("proxy", "downlink")
-            if (up > 0 || down > 0) {
-                Log.d(TAG, "stats: up=$up down=$down")
-            }
+            // No logging of traffic stats in production
             mapOf("up" to up, "down" to down)
         } catch (e: Exception) {
             Log.e(TAG, "queryStats error", e)
