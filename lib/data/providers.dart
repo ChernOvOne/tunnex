@@ -168,9 +168,13 @@ final vpnConfigProvider = Provider<Map<String, String>?>((ref) {
 
   final Map<String, dynamic> config;
   if (Platform.isWindows) {
+    final winMode = prefs.windowsVpnMode == 'tun'
+        ? WindowsVpnMode.tun
+        : WindowsVpnMode.systemProxy;
     config = XrayConfigWindows.generate(
       server: server,
       dnsServer: prefs.dnsServer,
+      mode: winMode,
     );
   } else if (core == 'singbox') {
     config = SingboxConfig.generate(

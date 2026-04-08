@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../core/config/xray_config_windows.dart';
 import 'vpn_service_windows.dart';
 
 enum VpnState { disconnected, connecting, connected, disconnecting }
@@ -58,14 +59,18 @@ class VpnStateNotifier extends StateNotifier<VpnState> {
     String core = 'xray',
     bool splitBypass = true,
     List<String> splitApps = const [],
+    String windowsMode = 'tun',
   }) async {
     state = VpnState.connecting;
 
     try {
       if (Platform.isWindows) {
-        await _windowsService!.start(configJson, onStateChanged: (s) {
-          state = _parseState(s);
-        });
+        final mode = windowsMode == 'tun'
+            ? WindowsVpnMode.tun
+            : WindowsVpnMode.systemProxy;
+        await _windowsService!.start(configJson,
+            onStateChanged: (s) => state = _parseState(s),
+            mode: mode);
       } else {
         await _channel.invokeMethod('start', {
           'config': configJson,

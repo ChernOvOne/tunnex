@@ -1,14 +1,16 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'vpn_service.dart';
+import 'vpn_service_windows.dart';
 
 class TrafficStats {
-  final int uploadSpeed; // bytes per second (delta)
+  final int uploadSpeed;
   final int downloadSpeed;
-  final int totalUpload; // session total bytes
+  final int totalUpload;
   final int totalDownload;
 
   const TrafficStats({
@@ -23,8 +25,7 @@ final trafficStatsProvider =
     StateNotifierProvider<TrafficStatsNotifier, TrafficStats>((ref) {
   final notifier = TrafficStatsNotifier();
 
-  // Start/stop polling based on VPN state
-  final sub = ref.listen(vpnStateProvider, (prev, next) {
+  ref.listen(vpnStateProvider, (prev, next) {
     if (next == VpnState.connected) {
       notifier.startPolling();
     } else if (next == VpnState.disconnected) {
@@ -32,21 +33,19 @@ final trafficStatsProvider =
     }
   });
 
-  // Also check current state at creation
-  final currentState = ref.read(vpnStateProvider);
-  if (currentState == VpnState.connected) {
+  if (ref.read(vpnStateProvider) == VpnState.connected) {
     notifier.startPolling();
   }
 
-  ref.onDispose(() {
-    notifier.stopPolling();
-  });
-
+  ref.onDispose(() => notifier.stopPolling());
   return notifier;
 });
 
 class TrafficStatsNotifier extends StateNotifier<TrafficStats> {
   static const _channel = MethodChannel('com.tunnex/vpn');
+  final WindowsVpnService? _winService =
+      Platform.isWindows ? WindowsVpnService() : null;
+
   Timer? _timer;
   int _totalUp = 0;
   int _totalDown = 0;
@@ -68,19 +67,29 @@ class TrafficStatsNotifier extends StateNotifier<TrafficStats> {
 
   Future<void> _poll() async {
     try {
-      final result = await _channel.invokeMapMethod<String, dynamic>('getStats');
-      if (result != null) {
-        final up = (result['up'] as int?) ?? 0;
-        final down = (result['down'] as int?) ?? 0;
-        _totalUp += up;
-        _totalDown += down;
-        state = TrafficStats(
-          uploadSpeed: up,
-          downloadSpeed: down,
-          totalUpload: _totalUp,
-          totalDownload: _totalDown,
-        );
+      Map<String, int> stats;
+
+      if (Platform.isWindows) {
+        stats = await _winService!.getStats();
+      } else {
+        final result =
+            await _channel.invokeMapMethod<String, dynamic>('getStats');
+        stats = {
+          'up': (result?['up'] as int?) ?? 0,
+          'down': (result?['down'] as int?) ?? 0,
+        };
       }
+
+      final up = stats['up'] ?? 0;
+      final down = stats['down'] ?? 0;
+      _totalUp += up;
+      _totalDown += down;
+      state = TrafficStats(
+        uploadSpeed: up,
+        downloadSpeed: down,
+        totalUpload: _totalUp,
+        totalDownload: _totalDown,
+      );
     } catch (_) {}
   }
 

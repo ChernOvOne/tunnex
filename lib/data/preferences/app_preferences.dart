@@ -49,6 +49,11 @@ class AppPreferences {
   // VPN core: 'xray' (singbox disabled — Go runtime conflict with dual AAR)
   String get vpnCore => 'xray';
 
+  // Windows VPN mode: 'tun' or 'systemProxy'
+  String get windowsVpnMode => _prefs.getString('windows_vpn_mode') ?? 'tun';
+  Future<void> setWindowsVpnMode(String mode) =>
+      _prefs.setString('windows_vpn_mode', mode);
+
   // Ping method: tcp, httpGet, httpHead, tlsHandshake
   String get pingMethod => _prefs.getString('ping_method') ?? 'tcp';
   Future<void> setPingMethod(String method) =>

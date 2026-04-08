@@ -275,6 +275,7 @@ class HomeScreen extends ConsumerWidget {
           core: vpnData['core']!,
           splitBypass: prefs.splitTunnelBypassMode,
           splitApps: prefs.splitTunnelApps,
+          windowsMode: prefs.windowsVpnMode,
         );
   }
 
