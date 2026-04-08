@@ -106,3 +106,14 @@ install(DIRECTORY "${PROJECT_BUILD_DIR}/${FLUTTER_ASSET_DIR_NAME}"
 install(FILES "${AOT_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   CONFIGURATIONS Profile;Release
   COMPONENT Runtime)
+
+# Bundle xray-core for Windows VPN
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/xray/"
+  DESTINATION "${INSTALL_BUNDLE_DATA_DIR}/../xray"
+  COMPONENT Runtime
+  FILES_MATCHING
+  PATTERN "xray.exe"
+  PATTERN "wintun.dll"
+  PATTERN "geoip.dat"
+  PATTERN "geosite.dat"
+)

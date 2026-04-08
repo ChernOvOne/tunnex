@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/config/singbox_config.dart';
+import '../core/config/xray_config_windows.dart';
 import '../core/config/xray_config.dart';
 import '../core/model/server_config.dart';
 import '../core/model/subscription.dart';
@@ -165,7 +167,12 @@ final vpnConfigProvider = Provider<Map<String, String>?>((ref) {
   final core = prefs.vpnCore; // 'xray' or 'singbox'
 
   final Map<String, dynamic> config;
-  if (core == 'singbox') {
+  if (Platform.isWindows) {
+    config = XrayConfigWindows.generate(
+      server: server,
+      dnsServer: prefs.dnsServer,
+    );
+  } else if (core == 'singbox') {
     config = SingboxConfig.generate(
       server: server,
       includePackages: prefs.splitTunnelApps,

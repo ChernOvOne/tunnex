@@ -1,7 +1,11 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import 'vpn_service_windows.dart';
 
 enum VpnState { disconnected, connecting, connected, disconnecting }
 
@@ -11,20 +15,25 @@ final vpnStateProvider =
 });
 
 class VpnStateNotifier extends StateNotifier<VpnState> {
+  // Android
   static const _channel = MethodChannel('com.tunnex/vpn');
   static const _eventChannel = EventChannel('com.tunnex/vpn_state');
-
   StreamSubscription? _eventSub;
 
+  // Windows
+  final WindowsVpnService? _windowsService =
+      Platform.isWindows ? WindowsVpnService() : null;
+
   VpnStateNotifier() : super(VpnState.disconnected) {
-    _listenToEvents();
-    _syncState();
+    if (Platform.isAndroid) {
+      _listenToEvents();
+      _syncState();
+    }
   }
 
   void _listenToEvents() {
     _eventSub = _eventChannel.receiveBroadcastStream().listen((event) {
-      final stateStr = event as String?;
-      state = _parseState(stateStr);
+      state = _parseState(event as String?);
     });
   }
 
@@ -35,16 +44,12 @@ class VpnStateNotifier extends StateNotifier<VpnState> {
     } catch (_) {}
   }
 
-  VpnState _parseState(String? stateStr) {
-    switch (stateStr) {
-      case 'connected':
-        return VpnState.connected;
-      case 'connecting':
-        return VpnState.connecting;
-      case 'disconnecting':
-        return VpnState.disconnecting;
-      default:
-        return VpnState.disconnected;
+  VpnState _parseState(String? s) {
+    switch (s) {
+      case 'connected': return VpnState.connected;
+      case 'connecting': return VpnState.connecting;
+      case 'disconnecting': return VpnState.disconnecting;
+      default: return VpnState.disconnected;
     }
   }
 
@@ -55,13 +60,20 @@ class VpnStateNotifier extends StateNotifier<VpnState> {
     List<String> splitApps = const [],
   }) async {
     state = VpnState.connecting;
+
     try {
-      await _channel.invokeMethod('start', {
-        'config': configJson,
-        'core': core,
-        'splitBypass': splitBypass,
-        'splitApps': splitApps,
-      });
+      if (Platform.isWindows) {
+        await _windowsService!.start(configJson, onStateChanged: (s) {
+          state = _parseState(s);
+        });
+      } else {
+        await _channel.invokeMethod('start', {
+          'config': configJson,
+          'core': core,
+          'splitBypass': splitBypass,
+          'splitApps': splitApps,
+        });
+      }
     } catch (e) {
       state = VpnState.disconnected;
       rethrow;
@@ -71,17 +83,21 @@ class VpnStateNotifier extends StateNotifier<VpnState> {
   Future<void> disconnect() async {
     state = VpnState.disconnecting;
     try {
-      await _channel.invokeMethod('stop');
-      // State will be updated via EventChannel
+      if (Platform.isWindows) {
+        await _windowsService!.stop();
+        state = VpnState.disconnected;
+      } else {
+        await _channel.invokeMethod('stop');
+      }
     } catch (_) {
       state = VpnState.disconnected;
     }
   }
 
   Future<bool> requestPermission() async {
+    if (Platform.isWindows) return true; // No VPN permission on Windows
     try {
-      final result = await _channel.invokeMethod<bool>('requestPermission');
-      return result ?? false;
+      return await _channel.invokeMethod<bool>('requestPermission') ?? false;
     } catch (_) {
       return false;
     }
