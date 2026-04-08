@@ -14,6 +14,8 @@ class WindowsVpnService {
   WindowsVpnMode _mode = WindowsVpnMode.systemProxy;
   bool _stopping = false;
   String? _lastServerIp;
+  String? _defaultGateway;
+  bool _tunAdapterReady = false; // Reuse existing adapter
 
   Future<String> get _xrayPath async {
     final exeDir = File(Platform.resolvedExecutable).parent.path;
@@ -46,7 +48,14 @@ class WindowsVpnService {
 
     try {
       _stopping = true;
-      await stop();
+      // Only kill xray on reconnect, keep tun2socks alive for TUN reuse
+      _xrayProcess?.kill(); _xrayProcess = null;
+      try { await Process.run('taskkill', ['/F', '/IM', 'tunnex-core.exe']); } catch (_) {}
+      if (_mode == WindowsVpnMode.systemProxy) await _disableSystemProxy();
+      // Remove old server route
+      if (_lastServerIp != null) {
+        await Process.run('route', ['delete', _lastServerIp!, 'mask', '255.255.255.255']).catchError((_){});
+      }
       // Wait for port
       final port = mode == WindowsVpnMode.tun
           ? XrayConfigWindows.socksPort : XrayConfigWindows.httpPort;
@@ -101,6 +110,19 @@ class WindowsVpnService {
             serverIp = settings['servers'][0]['address'];
           }
         } catch (_) {}
+        // Resolve domain to IP if needed
+        if (serverIp != null && !RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(serverIp)) {
+          try {
+            final addresses = await InternetAddress.lookup(serverIp);
+            if (addresses.isNotEmpty) {
+              final resolved = addresses.first.address;
+              log.writeln('[app] Resolved $serverIp → $resolved');
+              serverIp = resolved;
+            }
+          } catch (e) {
+            log.writeln('[app] DNS resolve failed: $e');
+          }
+        }
         log.writeln('[app] server IP: $serverIp');
         await _startTun(log, serverIp: serverIp);
       } else {
@@ -121,35 +143,55 @@ class WindowsVpnService {
     final tun2socks = await _tun2socksPath;
     final workDir = await _xrayDir;
 
-    log.writeln('[TUN] Starting tun2socks directly (admin mode)...');
+    // Check if tun2socks already running with adapter
+    if (_tunProcess != null && _tunAdapterReady) {
+      log.writeln('[TUN] Reusing existing TUN adapter (fast reconnect)');
+    } else {
+      log.writeln('[TUN] Starting tun2socks...');
 
-    // Start tun2socks directly — works because app is admin
-    _tunProcess = await Process.start(tun2socks, [
-      '-device', 'tun://tunnex',
-      '-proxy', 'socks5://tunnex:tunnex@127.0.0.1:${XrayConfigWindows.socksPort}',
-    ], workingDirectory: workDir);
+      _tunProcess = await Process.start(tun2socks, [
+        '-device', 'tun://tunnex',
+        '-proxy', 'socks5://tunnex:tunnex@127.0.0.1:${XrayConfigWindows.socksPort}',
+      ], workingDirectory: workDir);
 
-    _tunProcess!.stderr.transform(utf8.decoder).listen((l) {
-      log.writeln('[tun2socks] $l');
-      debugPrint('tun2socks: $l');
-    });
+      _tunProcess!.stderr.transform(utf8.decoder).listen((l) {
+        log.writeln('[tun2socks] $l');
+      });
 
-    _tunProcess!.exitCode.then((code) {
-      debugPrint('tun2socks DIED with code $code');
-    });
+      _tunProcess!.exitCode.then((code) {
+        debugPrint('tun2socks exited: $code');
+        _tunAdapterReady = false;
+      });
 
-    // Wait for adapter
-    for (int i = 0; i < 15; i++) {
-      await Future.delayed(const Duration(seconds: 1));
+      // Wait for adapter
+      for (int i = 0; i < 15; i++) {
+        await Future.delayed(const Duration(milliseconds: 500));
+        final check = await Process.run('netsh', ['interface', 'show', 'interface']);
+        if ((check.stdout as String).contains('tunnex')) {
+          log.writeln('[TUN] Adapter ready in ${(i + 1) * 500}ms');
+          _tunAdapterReady = true;
+          break;
+        }
+      }
+      if (!_tunAdapterReady) {
+        throw Exception('TUN adapter failed');
+      }
+    }
+
+    // Configure (fast — just update routes)
+    {
       final check = await Process.run('netsh', ['interface', 'show', 'interface']);
       if ((check.stdout as String).contains('tunnex')) {
-        log.writeln('[TUN] Adapter found after ${i + 1}s');
+        log.writeln('[TUN] Configuring routes...');
 
-        // Get default gateway before changing routes
-        final gwResult = await Process.run('powershell', ['-Command',
-          '(Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Sort-Object RouteMetric | Select-Object -First 1).NextHop']);
-        final defaultGw = (gwResult.stdout as String).trim();
-        log.writeln('[TUN] Default gateway: $defaultGw');
+        // Get default gateway (cache it)
+        if (_defaultGateway == null) {
+          final gwResult = await Process.run('powershell', ['-Command',
+            '(Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Sort-Object RouteMetric | Select-Object -First 1).NextHop']);
+          _defaultGateway = (gwResult.stdout as String).trim();
+        }
+        final defaultGw = _defaultGateway!;
+        log.writeln('[TUN] Gateway: $defaultGw');
 
         // Configure IP + routes
         await Process.run('netsh', ['interface', 'ip', 'set', 'address', 'name=tunnex', 'static', '10.0.0.2', '255.255.255.0', '10.0.0.1']);
@@ -168,12 +210,11 @@ class WindowsVpnService {
 
         log.writeln('[TUN] Routes configured');
         log.writeln('[TUN] SUCCESS');
-        return;
+      } else {
+        log.writeln('[TUN] WARNING: adapter gone');
+        _tunAdapterReady = false;
       }
-      log.writeln('[TUN] Check ${i + 1}/15: waiting...');
     }
-    log.writeln('[TUN] FAILED — run app as Administrator');
-    throw Exception('TUN failed — run as Administrator');
   }
 
   Future<void> stop() async {
