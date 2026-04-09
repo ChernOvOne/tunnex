@@ -29,7 +29,8 @@ class XrayConfig {
       ],
       'outbounds': [
         _buildOutbound(server),
-        {'tag': 'direct', 'protocol': 'freedom'},
+        {'tag': 'direct', 'protocol': 'freedom',
+          'settings': {'domainStrategy': 'UseIP'}},
         {'tag': 'block', 'protocol': 'blackhole'},
       ],
       'dns': {
@@ -64,16 +65,29 @@ class XrayConfig {
   }
 
   static Map<String, dynamic> _buildOutbound(ServerConfig server) {
+    final Map<String, dynamic> ob;
     switch (server.protocol) {
       case Protocol.vless:
-        return _buildVless(server);
+        ob = _buildVless(server);
       case Protocol.vmess:
-        return _buildVmess(server);
+        ob = _buildVmess(server);
       case Protocol.trojan:
-        return _buildTrojan(server);
+        ob = _buildTrojan(server);
       case Protocol.shadowsocks:
-        return _buildShadowsocks(server);
+        ob = _buildShadowsocks(server);
     }
+    _addMux(ob, server);
+    return ob;
+  }
+
+  /// Add mux if protocol supports it (not with XTLS flow)
+  static void _addMux(Map<String, dynamic> outbound, ServerConfig s) {
+    // Mux is incompatible with XTLS flow
+    if (s.flow.isNotEmpty) return;
+    outbound['mux'] = {
+      'enabled': true,
+      'concurrency': 8,
+    };
   }
 
   static Map<String, dynamic> _buildVless(ServerConfig s) {
