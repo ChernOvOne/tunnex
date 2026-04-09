@@ -100,14 +100,17 @@ class TrafficStatsNotifier extends StateNotifier<TrafficStats> {
       // Use Windows network adapter statistics (much more reliable than xray API)
       final result = await Process.run('powershell', ['-Command',
         "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
-        "Get-NetAdapterStatistics -Name 'tunnex' -ErrorAction SilentlyContinue | "
-        "Select-Object ReceivedBytes, SentBytes | ConvertTo-Json"
-      ]).timeout(const Duration(seconds: 2));
+        "Get-NetAdapterStatistics -Name 'tunnex*' -ErrorAction SilentlyContinue | "
+        "Select-Object ReceivedBytes, SentBytes -First 1 | ConvertTo-Json"
+      ]).timeout(const Duration(seconds: 3));
 
       if (result.exitCode != 0) return {'up': 0, 'down': 0};
 
       final json = (result.stdout as String).trim();
-      if (json.isEmpty || !json.startsWith('{')) return {'up': 0, 'down': 0};
+      if (json.isEmpty || !json.startsWith('{')) {
+        // No TUN adapter stats — try Proxy mode (system network)
+        return {'up': 0, 'down': 0};
+      }
 
       final data = Map<String, dynamic>.from(
           const JsonDecoder().convert(json) as Map);
