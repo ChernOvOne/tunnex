@@ -15,8 +15,79 @@ class XrayConfigWindows {
     required ServerConfig server,
     String dnsServer = '8.8.8.8',
     WindowsVpnMode mode = WindowsVpnMode.tun,
+    String splitMode = 'all',
+    List<String> vpnDomains = const [],
+    List<String> vpnApps = const [],
+    String realInterface = 'Ethernet',
   }) {
     final config = XrayConfig.generate(server: server, dnsServer: dnsServer);
+
+    // Split tunnel with FakeDNS (works in TUN mode!)
+    if (splitMode == 'selected' && vpnDomains.isNotEmpty) {
+      // FakeDNS: xray assigns fake IPs to domains, routes by IP range
+      config['dns'] = {
+        'servers': [
+          // FakeDNS for selected domains → fake IP pool
+          {
+            'address': 'fakedns',
+            'tag': 'fakedns',
+            'domains': vpnDomains.map((d) => 'domain:$d').toList(),
+          },
+          // Real DNS for everything else
+          {'address': '8.8.8.8', 'tag': 'real-dns'},
+        ],
+        'queryStrategy': 'UseIP',
+      };
+
+      final routing = config['routing'] as Map<String, dynamic>;
+      routing['domainStrategy'] = 'IPIfNonMatch';
+      routing['rules'] = [
+        // API
+        {'type': 'field', 'inboundTag': ['api'], 'outboundTag': 'api'},
+        // FakeDNS IPs (198.18.0.0/15) → proxy (these are VPN domains)
+        {'type': 'field', 'outboundTag': 'proxy', 'ip': ['198.18.0.0/15']},
+        // Selected domains by name → proxy
+        {'type': 'field', 'outboundTag': 'proxy',
+          'domain': vpnDomains.map((d) => 'domain:$d').toList()},
+        // Private IPs → direct
+        {'type': 'field', 'outboundTag': 'direct', 'ip': ['geoip:private']},
+      ];
+
+      // Default outbound = direct via REAL interface (bypass TUN!)
+      final outbounds = config['outbounds'] as List;
+      final directIdx = outbounds.indexWhere((o) => o['tag'] == 'direct');
+      if (directIdx >= 0) {
+        // Bind direct outbound to real network interface (not TUN)
+        outbounds[directIdx] = {
+          'tag': 'direct',
+          'protocol': 'freedom',
+          'settings': {'domainStrategy': 'UseIP'},
+          'streamSettings': {
+            'sockopt': {
+              'interface': realInterface,
+              'tcpKeepAliveInterval': 30,
+            },
+          },
+        };
+        // Move direct to first position (default)
+        if (directIdx > 0) {
+          final direct = outbounds.removeAt(directIdx);
+          outbounds.insert(0, direct);
+        }
+      }
+
+      // Sniffing must be enabled on TUN inbound for FakeDNS
+      final inbounds = config['inbounds'] as List;
+      for (final inbound in inbounds) {
+        if (inbound is Map && inbound['tag'] != 'api-in') {
+          inbound['sniffing'] = {
+            'enabled': true,
+            'destOverride': ['http', 'tls', 'fakedns'],
+            'metadataOnly': false,
+          };
+        }
+      }
+    }
 
     // Session password for SOCKS auth
     final sessPass = _generateSessionPassword();

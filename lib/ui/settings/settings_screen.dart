@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'dart:io';
+
 import '../../core/ping/server_ping.dart';
 import '../../data/preferences/app_preferences.dart';
 import '../theme/app_theme.dart';
 import 'split_tunnel_screen.dart';
+import 'split_tunnel_windows_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -18,10 +21,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Widget build(BuildContext context) {
     final prefs = ref.watch(appPreferencesProvider);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 100),
+    return SafeArea(
+      child: ListView(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
       children: [
-        const SizedBox(height: 16),
+
+        // --- Subscriptions ---
+        _sectionTitle('Подписки'),
+        const SizedBox(height: 8),
+        _tile(
+          icon: Icons.sync_outlined,
+          title: 'Автообновление',
+          subtitle: prefs.autoRefreshMinutes == 0
+              ? 'Выключено'
+              : 'Каждые ${prefs.autoRefreshMinutes} мин.',
+          onTap: () => _showRefreshIntervalDialog(context, prefs),
+        ),
+
+        const SizedBox(height: 24),
 
         // --- Network ---
         _sectionTitle('Сеть'),
@@ -36,8 +53,24 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: 24),
 
         // --- VPN Mode ---
-        _sectionTitle('Режим VPN'),
+        _sectionTitle(Platform.isWindows ? 'Раздельный доступ' : 'Режим VPN'),
         const SizedBox(height: 4),
+        if (Platform.isWindows) ...[
+          _tile(
+            icon: prefs.windowsSplitMode == 'all' ? Icons.public : Icons.checklist,
+            title: prefs.windowsSplitMode == 'all'
+                ? 'Все сайты через VPN'
+                : 'Только выбранные сайты (${prefs.vpnDomains.length})',
+            subtitle: prefs.windowsSplitMode == 'all'
+                ? 'Весь трафик идёт через VPN'
+                : 'Только указанные домены через VPN',
+            onTap: () async {
+            await Navigator.push(context,
+                MaterialPageRoute(builder: (_) => const SplitTunnelWindowsScreen()));
+            setState(() {}); // refresh after returning
+          },
+          ),
+        ] else ...[
         const Padding(
           padding: EdgeInsets.only(bottom: 8),
           child: Text(
@@ -66,6 +99,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onTap: () => Navigator.push(context,
                 MaterialPageRoute(builder: (_) => const SplitTunnelScreen())),
           ),
+        ],
 
         const SizedBox(height: 24),
 
@@ -152,6 +186,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           onTap: () {},
         ),
       ],
+      ),
     );
   }
 
@@ -398,6 +433,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     return PingMethod.values
         .firstWhere((m) => m.name == method, orElse: () => PingMethod.tcp)
         .displayName;
+  }
+
+  void _showRefreshIntervalDialog(BuildContext context, AppPreferences prefs) {
+    final options = {0: 'Выключено', 30: '30 минут', 60: '1 час', 120: '2 часа', 360: '6 часов'};
+    final current = prefs.autoRefreshMinutes;
+    showDialog(
+      context: context,
+      builder: (ctx) => SimpleDialog(
+        title: const Text('Автообновление подписок'),
+        children: options.entries.map((e) => SimpleDialogOption(
+          onPressed: () {
+            prefs.setAutoRefreshMinutes(e.key);
+            Navigator.pop(ctx);
+            setState(() {});
+          },
+          child: Row(children: [
+            Icon(current == e.key ? Icons.radio_button_checked : Icons.radio_button_off,
+                color: current == e.key ? AppColors.primary : AppColors.textMuted, size: 20),
+            const SizedBox(width: 12),
+            Text(e.value, style: const TextStyle(color: AppColors.textPrimary)),
+          ]),
+        )).toList(),
+      ),
+    );
   }
 
   void _showPingMethodDialog(BuildContext context, AppPreferences prefs) {

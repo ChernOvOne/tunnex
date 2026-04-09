@@ -1,11 +1,12 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'vpn_service.dart';
-import 'vpn_service_windows.dart';
 
 class TrafficStats {
   final int uploadSpeed;
@@ -43,8 +44,6 @@ final trafficStatsProvider =
 
 class TrafficStatsNotifier extends StateNotifier<TrafficStats> {
   static const _channel = MethodChannel('com.tunnex/vpn');
-  final WindowsVpnService? _winService =
-      Platform.isWindows ? WindowsVpnService() : null;
 
   Timer? _timer;
   int _totalUp = 0;
@@ -70,7 +69,7 @@ class TrafficStatsNotifier extends StateNotifier<TrafficStats> {
       Map<String, int> stats;
 
       if (Platform.isWindows) {
-        stats = await _winService!.getStats();
+        stats = await _getWindowsStats();
       } else {
         final result =
             await _channel.invokeMapMethod<String, dynamic>('getStats');
@@ -91,6 +90,40 @@ class TrafficStatsNotifier extends StateNotifier<TrafficStats> {
         totalDownload: _totalDown,
       );
     } catch (_) {}
+  }
+
+  int _lastWinUp = 0;
+  int _lastWinDown = 0;
+
+  Future<Map<String, int>> _getWindowsStats() async {
+    try {
+      // Use Windows network adapter statistics (much more reliable than xray API)
+      final result = await Process.run('powershell', ['-Command',
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+        "Get-NetAdapterStatistics -Name 'tunnex' -ErrorAction SilentlyContinue | "
+        "Select-Object ReceivedBytes, SentBytes | ConvertTo-Json"
+      ]).timeout(const Duration(seconds: 2));
+
+      if (result.exitCode != 0) return {'up': 0, 'down': 0};
+
+      final json = (result.stdout as String).trim();
+      if (json.isEmpty || !json.startsWith('{')) return {'up': 0, 'down': 0};
+
+      final data = Map<String, dynamic>.from(
+          const JsonDecoder().convert(json) as Map);
+      final curUp = (data['SentBytes'] as int?) ?? 0;
+      final curDown = (data['ReceivedBytes'] as int?) ?? 0;
+
+      // Calculate delta
+      final deltaUp = curUp > _lastWinUp ? curUp - _lastWinUp : 0;
+      final deltaDown = curDown > _lastWinDown ? curDown - _lastWinDown : 0;
+      _lastWinUp = curUp;
+      _lastWinDown = curDown;
+
+      return {'up': deltaUp, 'down': deltaDown};
+    } catch (_) {
+      return {'up': 0, 'down': 0};
+    }
   }
 
   @override

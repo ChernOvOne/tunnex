@@ -1,4 +1,7 @@
+import 'dart:io';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
@@ -53,6 +56,44 @@ class AppPreferences {
   String get windowsVpnMode => _prefs.getString('windows_vpn_mode') ?? 'tun';
   Future<void> setWindowsVpnMode(String mode) =>
       _prefs.setString('windows_vpn_mode', mode);
+
+  // Auto-refresh interval in minutes (0 = disabled)
+  int get autoRefreshMinutes => _prefs.getInt('auto_refresh_minutes') ?? 60;
+
+  // Windows split tunnel mode: 'all' = everything through VPN, 'selected' = only listed domains
+  String get windowsSplitMode => _prefs.getString('windows_split_mode') ?? 'all';
+  Future<void> setWindowsSplitMode(String mode) =>
+      _prefs.setString('windows_split_mode', mode);
+
+  // Domains to route through VPN (when mode = 'selected')
+  List<String> get vpnDomains =>
+      _prefs.getStringList('vpn_domains') ?? defaultVpnDomains;
+  Future<void> setVpnDomains(List<String> domains) =>
+      _prefs.setStringList('vpn_domains', domains);
+
+  static const List<String> defaultVpnDomains = [
+    'youtube.com',
+    'googlevideo.com',
+    'instagram.com',
+    'twitter.com',
+    'x.com',
+    'tiktok.com',
+    'discord.com',
+    'discord.gg',
+    'twitch.tv',
+    'openai.com',
+    'chatgpt.com',
+    'claude.ai',
+    'anthropic.com',
+    'spotify.com',
+    'netflix.com',
+    'linkedin.com',
+    'medium.com',
+    'notion.so',
+    'figma.com',
+  ];
+  Future<void> setAutoRefreshMinutes(int minutes) =>
+      _prefs.setInt('auto_refresh_minutes', minutes);
 
   // Ping method: tcp, httpGet, httpHead, tlsHandshake
   String get pingMethod => _prefs.getString('ping_method') ?? 'tcp';

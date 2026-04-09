@@ -4,8 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'dart:convert';
+
+import '../../core/config/xray_config.dart';
+import '../../core/config/xray_config_windows.dart';
 import '../../core/model/server_config.dart';
 import '../../core/ping/server_ping.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
 import '../../data/preferences/app_preferences.dart';
 import '../../data/providers.dart';
 import '../../data/repository/server_repository.dart';
@@ -280,15 +286,15 @@ class HomeScreen extends ConsumerWidget {
     }
   }
 
-  void _toggleVpn(BuildContext context, WidgetRef ref, VpnState currentState) {
+  void _toggleVpn(BuildContext context, WidgetRef ref, VpnState currentState) async {
     if (currentState == VpnState.connected ||
         currentState == VpnState.connecting) {
       ref.read(vpnStateProvider.notifier).disconnect();
       return;
     }
 
-    final vpnData = ref.read(vpnConfigProvider);
-    if (vpnData == null) {
+    final server = ref.read(selectedServerProvider);
+    if (server == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Выберите сервер для подключения'),
@@ -298,13 +304,49 @@ class HomeScreen extends ConsumerWidget {
       return;
     }
 
+    // Generate config FRESH — read split mode from file directly (SharedPreferences caching issue)
     final prefs = ref.read(appPreferencesProvider);
+    String splitMode = prefs.windowsSplitMode;
+    List<String> vpnDomains = prefs.vpnDomains;
+    if (Platform.isWindows) {
+      final sp = await SharedPreferences.getInstance();
+      await sp.reload();
+      splitMode = sp.getString('windows_split_mode') ?? 'all';
+      vpnDomains = sp.getStringList('vpn_domains') ?? vpnDomains;
+    }
+    String winMode = prefs.windowsVpnMode;
+    // Detect real network interface for direct traffic bypass
+    String realIface = 'Ethernet';
+    if (Platform.isWindows) {
+      try {
+        final r = await Process.run('powershell', ['-Command',
+          "(Get-NetAdapter | Where-Object {(\$_.Status -eq 'Up') -and (\$_.Name -notlike 'tunnex*') -and (\$_.Name -notlike '*Clash*')} | Select-Object -First 1).Name"
+        ]);
+        final name = (r.stdout as String).trim();
+        if (name.isNotEmpty) realIface = name;
+      } catch (_) {}
+    }
+    debugPrint('CONNECT: splitMode=$splitMode winMode=$winMode iface=$realIface domains=${vpnDomains.length}');
+    final Map<String, dynamic> config;
+    if (Platform.isWindows) {
+      config = XrayConfigWindows.generate(
+        server: server,
+        dnsServer: prefs.dnsServer,
+        splitMode: splitMode,
+        vpnDomains: vpnDomains,
+        mode: winMode == 'tun' ? WindowsVpnMode.tun : WindowsVpnMode.systemProxy,
+        realInterface: realIface,
+      );
+    } else {
+      config = XrayConfig.generate(server: server, dnsServer: prefs.dnsServer);
+    }
+
     ref.read(vpnStateProvider.notifier).connect(
-          vpnData['config']!,
-          core: vpnData['core']!,
+          jsonEncode(config),
+          core: 'xray',
           splitBypass: prefs.splitTunnelBypassMode,
           splitApps: prefs.splitTunnelApps,
-          windowsMode: prefs.windowsVpnMode,
+          windowsMode: winMode,
         );
   }
 
@@ -574,7 +616,8 @@ class HomeScreen extends ConsumerWidget {
               const SizedBox(width: 8),
               Text(result != null
                   ? 'Подписка обновлена (${result.servers.length} серверов)'
-                  : 'Не удалось обновить'),
+                  : 'Не удалось обновить',
+                  style: const TextStyle(color: AppColors.textPrimary)),
             ],
           ),
           behavior: SnackBarBehavior.floating,

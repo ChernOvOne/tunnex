@@ -6,6 +6,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
+import android.net.NetworkRequest
 import android.net.VpnService
 import android.os.Build
 import android.os.ParcelFileDescriptor
@@ -72,6 +76,8 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
     private var vpnInterface: ParcelFileDescriptor? = null
     private var splitBypass: Boolean = true
     private var splitApps: List<String> = emptyList()
+    private var lastConfig: String? = null
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -140,9 +146,12 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
             else "Tunnex VPN"
         } catch (_: Exception) { "Tunnex VPN" }
 
+        lastConfig = config
+
         withContext(Dispatchers.Main) {
             updateNotification(serverName)
             setState("connected")
+            registerNetworkCallback()
         }
 
         // Only save connection state, NOT the config (contains server credentials)
@@ -188,6 +197,7 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
 
     fun stopVpn() {
         setState("disconnecting")
+        unregisterNetworkCallback()
         scope.launch {
             try {
                 coreController?.stopLoop()
@@ -220,14 +230,20 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
     }
 
     fun getTrafficStats(): Map<String, Long> {
-        val controller = coreController ?: return mapOf("up" to 0L, "down" to 0L)
+        val controller = coreController
+        if (controller == null) {
+            Log.w(TAG, "getTrafficStats: controller is null")
+            return mapOf("up" to 0L, "down" to 0L)
+        }
         return try {
             val up = controller.queryStats("proxy", "uplink")
             val down = controller.queryStats("proxy", "downlink")
-            // No logging of traffic stats in production
+            if (up > 0 || down > 0) {
+                Log.d(TAG, "stats: up=$up down=$down")
+            }
             mapOf("up" to up, "down" to down)
         } catch (e: Exception) {
-            Log.e(TAG, "queryStats error", e)
+            Log.e(TAG, "queryStats error: ${e.message}")
             mapOf("up" to 0L, "down" to 0L)
         }
     }
@@ -279,6 +295,62 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
     }
 
     // Lifecycle
+    // --- Network change detection (fixes Telegram after sleep) ---
+
+    private fun registerNetworkCallback() {
+        if (networkCallback != null) return
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        networkCallback = object : ConnectivityManager.NetworkCallback() {
+            private var lastRestartTime = 0L
+            override fun onAvailable(network: Network) {
+                val now = System.currentTimeMillis()
+                if (now - lastRestartTime < 30000) return // debounce 30s
+                if (currentState != "connected") return
+                lastRestartTime = now
+                Log.i(TAG, "Network changed, restarting core")
+                scope.launch {
+                    restartCore()
+                }
+            }
+        }
+        cm.registerNetworkCallback(
+            NetworkRequest.Builder()
+                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                .build(),
+            networkCallback!!
+        )
+    }
+
+    private fun unregisterNetworkCallback() {
+        networkCallback?.let {
+            try {
+                (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
+                    .unregisterNetworkCallback(it)
+            } catch (_: Exception) {}
+        }
+        networkCallback = null
+    }
+
+    private suspend fun restartCore() {
+        val config = lastConfig ?: return
+        try {
+            coreController?.stopLoop()
+            coreController = null
+            // Close old TUN and create new (reusing fd causes Go panic)
+            vpnInterface?.close()
+            vpnInterface = null
+            val fd = setupTunInterface()
+            if (fd < 0) return
+            delay(2000) // network stabilization
+            val controller = Libv2ray.newCoreController(this@TunnexVpnService)
+            controller.startLoop(config, fd.toInt())
+            coreController = controller
+            Log.i(TAG, "Core restarted after network change")
+        } catch (e: Exception) {
+            Log.e(TAG, "Restart failed", e)
+        }
+    }
+
     override fun onRevoke() { stopVpn(); super.onRevoke() }
     override fun onDestroy() {
         instance = null; scope.cancel(); releaseLocks()

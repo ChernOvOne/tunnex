@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
+import 'package:flutter/foundation.dart';
 
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -25,8 +28,17 @@ class SubscriptionsNotifier extends StateNotifier<List<Subscription>> {
   final Ref _ref;
   final _fetcher = SubscriptionFetcher();
 
+  Timer? _refreshTimer;
+
   SubscriptionsNotifier(this._ref) : super([]) {
-    _load().then((_) => _autoRefresh());
+    _load().then((_) {
+      _autoRefresh();
+      // Periodic refresh based on settings
+      final minutes = _ref.read(appPreferencesProvider).autoRefreshMinutes;
+      if (minutes > 0) {
+        _refreshTimer = Timer.periodic(Duration(minutes: minutes), (_) => _autoRefresh());
+      }
+    });
   }
 
   Future<void> _load() async {
@@ -34,7 +46,6 @@ class SubscriptionsNotifier extends StateNotifier<List<Subscription>> {
     state = await repo.getAll();
   }
 
-  /// Auto-refresh all subscriptions on app start
   Future<void> _autoRefresh() async {
     for (final sub in state) {
       await refresh(sub.id);
@@ -178,9 +189,14 @@ final vpnConfigProvider = Provider<Map<String, String>?>((ref) {
     final winMode = prefs.windowsVpnMode == 'tun'
         ? WindowsVpnMode.tun
         : WindowsVpnMode.systemProxy;
+    final splitMode = prefs.windowsSplitMode;
+    final domains = prefs.vpnDomains;
+    debugPrint('VPN config: splitMode=$splitMode, domains=${domains.length}');
     config = XrayConfigWindows.generate(
       server: server,
       dnsServer: prefs.dnsServer,
+      splitMode: splitMode,
+      vpnDomains: domains,
       mode: winMode,
     );
   } else if (core == 'singbox') {
