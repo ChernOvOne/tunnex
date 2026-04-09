@@ -56,7 +56,9 @@ class TrafficStatsNotifier extends StateNotifier<TrafficStats> {
     _totalDown = 0;
     state = const TrafficStats();
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) => _poll());
+    // Windows: 3s interval (PowerShell is heavy), Android: 1s
+    final interval = Platform.isWindows ? 3 : 1;
+    _timer = Timer.periodic(Duration(seconds: interval), (_) => _poll());
   }
 
   void stopPolling() {
@@ -97,33 +99,50 @@ class TrafficStatsNotifier extends StateNotifier<TrafficStats> {
 
   Future<Map<String, int>> _getWindowsStats() async {
     try {
-      // Use Windows network adapter statistics (much more reliable than xray API)
-      final result = await Process.run('powershell', ['-Command',
-        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
-        "Get-NetAdapterStatistics -Name 'tunnex*' -ErrorAction SilentlyContinue | "
-        "Select-Object ReceivedBytes, SentBytes -First 1 | ConvertTo-Json"
-      ]).timeout(const Duration(seconds: 3));
+      // Use netsh (lightweight, no PowerShell overhead)
+      final result = await Process.run('netsh', [
+        'interface', 'ip', 'show', 'interface', 'tunnex'
+      ]).timeout(const Duration(seconds: 2));
 
-      if (result.exitCode != 0) return {'up': 0, 'down': 0};
-
-      final json = (result.stdout as String).trim();
-      if (json.isEmpty || !json.startsWith('{')) {
-        // No TUN adapter stats — try Proxy mode (system network)
+      if (result.exitCode != 0) {
+        // Try with wildcard name
+        final r2 = await Process.run('netstat', ['-e']).timeout(const Duration(seconds: 2));
+        if (r2.exitCode == 0) {
+          // Parse netstat -e for total bytes
+          final lines = (r2.stdout as String).split('\n');
+          for (final line in lines) {
+            if (line.contains('Bytes') || line.contains('Байт')) {
+              final nums = RegExp(r'(\d+)').allMatches(line).map((m) => int.parse(m.group(0)!)).toList();
+              if (nums.length >= 2) {
+                final curDown = nums[0];
+                final curUp = nums[1];
+                final deltaUp = curUp > _lastWinUp ? curUp - _lastWinUp : 0;
+                final deltaDown = curDown > _lastWinDown ? curDown - _lastWinDown : 0;
+                _lastWinUp = curUp;
+                _lastWinDown = curDown;
+                // Scale to per-second (interval is 3s)
+                return {'up': deltaUp ~/ 3, 'down': deltaDown ~/ 3};
+              }
+            }
+          }
+        }
         return {'up': 0, 'down': 0};
       }
 
-      final data = Map<String, dynamic>.from(
-          const JsonDecoder().convert(json) as Map);
-      final curUp = (data['SentBytes'] as int?) ?? 0;
-      final curDown = (data['ReceivedBytes'] as int?) ?? 0;
+      // Parse interface stats
+      final output = result.stdout as String;
+      final bytesIn = RegExp(r'(?:Bytes In|Входящие байты)[^\d]*(\d+)').firstMatch(output);
+      final bytesOut = RegExp(r'(?:Bytes Out|Исходящие байты)[^\d]*(\d+)').firstMatch(output);
 
-      // Calculate delta
+      final curDown = bytesIn != null ? int.parse(bytesIn.group(1)!) : 0;
+      final curUp = bytesOut != null ? int.parse(bytesOut.group(1)!) : 0;
+
       final deltaUp = curUp > _lastWinUp ? curUp - _lastWinUp : 0;
       final deltaDown = curDown > _lastWinDown ? curDown - _lastWinDown : 0;
       _lastWinUp = curUp;
       _lastWinDown = curDown;
 
-      return {'up': deltaUp, 'down': deltaDown};
+      return {'up': deltaUp ~/ 3, 'down': deltaDown ~/ 3};
     } catch (_) {
       return {'up': 0, 'down': 0};
     }

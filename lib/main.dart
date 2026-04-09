@@ -84,7 +84,8 @@ class _TunnexAppState extends ConsumerState<TunnexApp> with WindowListener {
       MenuItem(label: 'Выход', onClicked: () async {
         final vpn = ref.read(vpnStateProvider.notifier);
         await vpn.disconnect();
-        await Future.delayed(const Duration(seconds: 1));
+        await windowManager.setPreventClose(false);
+        await windowManager.close();
         exit(0);
       }),
     ]);
@@ -112,8 +113,20 @@ class _TunnexAppState extends ConsumerState<TunnexApp> with WindowListener {
 
   @override
   void onWindowClose() async {
-    // Minimize to tray instead of closing
-    await windowManager.hide();
+    // Check if user wants to minimize to tray or really exit
+    final isVisible = await windowManager.isVisible();
+    if (isVisible) {
+      // User clicked X — minimize to tray
+      await windowManager.hide();
+    }
+  }
+
+  @override
+  void onWindowEvent(String eventName) {
+    // Allow system shutdown/restart
+    if (eventName == 'close') {
+      // Don't block — let system close
+    }
   }
 
   @override
