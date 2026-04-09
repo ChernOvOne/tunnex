@@ -110,17 +110,30 @@ class WindowsVpnService {
             serverIp = settings['servers'][0]['address'];
           }
         } catch (_) {}
-        // Resolve domain to IP if needed
+        // Resolve domain to IP if needed (BEFORE TUN — otherwise DNS goes through TUN loop)
         if (serverIp != null && !RegExp(r'^\d+\.\d+\.\d+\.\d+$').hasMatch(serverIp)) {
+          log.writeln('[app] Resolving domain: $serverIp');
           try {
-            final addresses = await InternetAddress.lookup(serverIp);
+            final addresses = await InternetAddress.lookup(serverIp)
+                .timeout(const Duration(seconds: 3));
             if (addresses.isNotEmpty) {
               final resolved = addresses.first.address;
               log.writeln('[app] Resolved $serverIp → $resolved');
               serverIp = resolved;
             }
           } catch (e) {
-            log.writeln('[app] DNS resolve failed: $e');
+            log.writeln('[app] DNS resolve failed: $e, trying nslookup...');
+            // Fallback: nslookup
+            try {
+              final ns = await Process.run('nslookup', [serverIp!])
+                  .timeout(const Duration(seconds: 3));
+              final match = RegExp(r'Address:\s*([\d.]+)').allMatches(ns.stdout as String).lastOrNull;
+              if (match != null) {
+                final resolved = match.group(1)!;
+                log.writeln('[app] nslookup resolved: $resolved');
+                serverIp = resolved;
+              }
+            } catch (_) {}
           }
         }
         log.writeln('[app] server IP: $serverIp');
