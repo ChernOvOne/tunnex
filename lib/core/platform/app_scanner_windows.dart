@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 /// Discovers domains/IPs used by running Windows applications
@@ -34,7 +35,9 @@ class AppScannerWindows {
       final result = await Process.run('powershell', ['-Command',
         '[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; '
         'Get-Process | Where-Object {\$_.MainWindowTitle -ne ""} | Select-Object ProcessName, Id, MainWindowTitle | ConvertTo-Csv -NoTypeInformation'
-      ]).timeout(const Duration(seconds: 10));
+      ], stdoutEncoding: const Utf8Codec(allowMalformed: true),
+         stderrEncoding: const Utf8Codec(allowMalformed: true),
+      ).timeout(const Duration(seconds: 10));
 
       if (result.exitCode != 0) return [];
 
@@ -73,7 +76,8 @@ class AppScannerWindows {
         "Get-NetTCPConnection -OwningProcess $pid -ErrorAction SilentlyContinue | "
         "Where-Object {\$_.RemoteAddress -ne '127.0.0.1' -and \$_.RemoteAddress -ne '::1' -and \$_.RemoteAddress -ne '0.0.0.0'} | "
         "Select-Object -ExpandProperty RemoteAddress -Unique"
-      ]).timeout(const Duration(seconds: 5));
+      ], stdoutEncoding: const Utf8Codec(allowMalformed: true),
+      ).timeout(const Duration(seconds: 5));
 
       if (result.exitCode != 0) return [];
 

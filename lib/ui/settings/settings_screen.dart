@@ -53,53 +53,47 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: 24),
 
         // --- VPN Mode ---
-        _sectionTitle(Platform.isWindows ? 'Раздельный доступ' : 'Режим VPN'),
-        const SizedBox(height: 4),
-        if (Platform.isWindows) ...[
+        _sectionTitle('Режим VPN'),
+        const SizedBox(height: 8),
+
+        // App split tunnel (Android only)
+        if (!Platform.isWindows) ...[
           _tile(
-            icon: prefs.windowsSplitMode == 'all' ? Icons.public : Icons.checklist,
+            icon: prefs.splitTunnelBypassMode ? Icons.public : Icons.app_shortcut,
+            title: prefs.splitTunnelBypassMode ? 'Все приложения' : 'Только выбранные приложения',
+            subtitle: prefs.splitTunnelBypassMode
+                ? 'Все приложения через VPN'
+                : '${prefs.splitTunnelApps.length} приложений через VPN',
+            onTap: () => _showVpnModeDialog(context, prefs),
+          ),
+          const SizedBox(height: 6),
+          if (!prefs.splitTunnelBypassMode)
+            _tile(
+              icon: Icons.checklist_outlined,
+              title: 'Выбрать приложения',
+              subtitle: 'Какие приложения идут через VPN',
+              onTap: () => Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const SplitTunnelScreen())),
+            ),
+          const SizedBox(height: 6),
+        ],
+
+        // Domain split tunnel (Windows only — Android uses app-level split)
+        if (Platform.isWindows)
+          _tile(
+            icon: prefs.windowsSplitMode == 'all' ? Icons.language : Icons.checklist,
             title: prefs.windowsSplitMode == 'all'
                 ? 'Все сайты через VPN'
                 : 'Только выбранные сайты (${prefs.vpnDomains.length})',
             subtitle: prefs.windowsSplitMode == 'all'
-                ? 'Весь трафик идёт через VPN'
-                : 'Только указанные домены через VPN',
+                ? 'Все домены проксируются через VPN'
+                : 'Только указанные домены через VPN, остальные напрямую',
             onTap: () async {
-            await Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const SplitTunnelWindowsScreen()));
-            setState(() {}); // refresh after returning
-          },
+              await Navigator.push(context,
+                  MaterialPageRoute(builder: (_) => const SplitTunnelWindowsScreen()));
+              setState(() {});
+            },
           ),
-        ] else ...[
-        const Padding(
-          padding: EdgeInsets.only(bottom: 8),
-          child: Text(
-            'Какие приложения будут работать через VPN?',
-            style: TextStyle(fontSize: 13, color: AppColors.textMuted),
-          ),
-        ),
-        _tile(
-          icon: prefs.splitTunnelBypassMode
-              ? Icons.public
-              : Icons.app_shortcut,
-          title: prefs.splitTunnelBypassMode
-              ? 'Все приложения'
-              : 'Только выбранные',
-          subtitle: prefs.splitTunnelBypassMode
-              ? 'VPN защищает весь трафик на устройстве'
-              : 'VPN только для выбранных приложений',
-          onTap: () => _showVpnModeDialog(context, prefs),
-        ),
-        const SizedBox(height: 6),
-        if (!prefs.splitTunnelBypassMode)
-          _tile(
-            icon: Icons.checklist_outlined,
-            title: 'Выбрать приложения',
-            subtitle: '${prefs.splitTunnelApps.length} приложений через VPN',
-            onTap: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const SplitTunnelScreen())),
-          ),
-        ],
 
         const SizedBox(height: 24),
 

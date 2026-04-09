@@ -304,16 +304,12 @@ class HomeScreen extends ConsumerWidget {
       return;
     }
 
-    // Generate config FRESH — read split mode from file directly (SharedPreferences caching issue)
+    // Generate config FRESH — force reload SharedPreferences from disk
+    final sp = await SharedPreferences.getInstance();
+    await sp.reload();
     final prefs = ref.read(appPreferencesProvider);
-    String splitMode = prefs.windowsSplitMode;
-    List<String> vpnDomains = prefs.vpnDomains;
-    if (Platform.isWindows) {
-      final sp = await SharedPreferences.getInstance();
-      await sp.reload();
-      splitMode = sp.getString('windows_split_mode') ?? 'all';
-      vpnDomains = sp.getStringList('vpn_domains') ?? vpnDomains;
-    }
+    final splitMode = sp.getString('windows_split_mode') ?? 'all';
+    final vpnDomains = sp.getStringList('vpn_domains') ?? prefs.vpnDomains;
     String winMode = prefs.windowsVpnMode;
     // Detect real network interface for direct traffic bypass
     String realIface = 'Ethernet';
@@ -338,7 +334,10 @@ class HomeScreen extends ConsumerWidget {
         realInterface: realIface,
       );
     } else {
-      config = XrayConfig.generate(server: server, dnsServer: prefs.dnsServer);
+      config = XrayConfig.generate(
+        server: server,
+        dnsServer: prefs.dnsServer,
+      );
     }
 
     ref.read(vpnStateProvider.notifier).connect(

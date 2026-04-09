@@ -12,8 +12,6 @@ class XrayConfig {
     return {
       'log': {'loglevel': 'info'},
       'inbounds': [
-        // TUN inbound only — NO SOCKS5 proxy (CVE: SOCKS5 without auth
-        // allows any app on device to discover VPN server IP and leak traffic)
         {
           'tag': 'tun',
           'port': 0,
@@ -36,22 +34,14 @@ class XrayConfig {
       ],
       'dns': {
         'servers': [
-          // Use plain DNS for xray (DoH needs bootstrap resolver)
           _plainDns(dnsServer),
-          {
-            'address': _plainDns(dnsServer),
-            'domains': ['geosite:geolocation-!cn'],
-          },
+          {'address': _plainDns(dnsServer), 'domains': ['geosite:geolocation-!cn']},
         ],
       },
       'routing': {
         'domainStrategy': 'AsIs',
         'rules': [
-          {
-            'type': 'field',
-            'outboundTag': 'direct',
-            'ip': ['geoip:private'],
-          },
+          {'type': 'field', 'outboundTag': 'direct', 'ip': ['geoip:private']},
         ],
       },
       'stats': {},
