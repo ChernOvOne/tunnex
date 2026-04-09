@@ -99,35 +99,38 @@ class TrafficStatsNotifier extends StateNotifier<TrafficStats> {
 
   Future<Map<String, int>> _getWindowsStats() async {
     try {
-      // Use netstat -e (lightweight, no PowerShell)
-      final result = await Process.run('netstat', ['-e'])
+      // netstat -e output is in system codepage (CP866/CP1251) — parse numbers only
+      final result = await Process.run('netstat', ['-e'],
+          stdoutEncoding: const Latin1Codec())
           .timeout(const Duration(seconds: 2));
 
       if (result.exitCode != 0) return {'up': 0, 'down': 0};
 
+      // Find the line with the largest numbers (that's the Bytes line)
       final lines = (result.stdout as String).split('\n');
+      int maxReceived = 0, maxSent = 0;
       for (final line in lines) {
-        if (line.contains('Bytes') || line.contains('Байт')) {
-          final nums = RegExp(r'(\d+)').allMatches(line)
-              .map((m) => int.parse(m.group(0)!)).toList();
-          if (nums.length >= 2) {
-            final curDown = nums[0];
-            final curUp = nums[1];
-            if (_lastWinUp == 0 && _lastWinDown == 0) {
-              // First poll — just save baseline
-              _lastWinUp = curUp;
-              _lastWinDown = curDown;
-              return {'up': 0, 'down': 0};
-            }
-            final deltaUp = curUp > _lastWinUp ? curUp - _lastWinUp : 0;
-            final deltaDown = curDown > _lastWinDown ? curDown - _lastWinDown : 0;
-            _lastWinUp = curUp;
-            _lastWinDown = curDown;
-            return {'up': deltaUp ~/ 3, 'down': deltaDown ~/ 3};
-          }
+        final nums = RegExp(r'(\d{6,})').allMatches(line)
+            .map((m) => int.parse(m.group(0)!)).toList();
+        if (nums.length >= 2 && nums[0] > maxReceived) {
+          maxReceived = nums[0];
+          maxSent = nums[1];
         }
       }
-      return {'up': 0, 'down': 0};
+
+      if (maxReceived == 0) return {'up': 0, 'down': 0};
+
+      if (_lastWinUp == 0 && _lastWinDown == 0) {
+        _lastWinUp = maxSent;
+        _lastWinDown = maxReceived;
+        return {'up': 0, 'down': 0};
+      }
+
+      final deltaUp = maxSent > _lastWinUp ? maxSent - _lastWinUp : 0;
+      final deltaDown = maxReceived > _lastWinDown ? maxReceived - _lastWinDown : 0;
+      _lastWinUp = maxSent;
+      _lastWinDown = maxReceived;
+      return {'up': deltaUp ~/ 3, 'down': deltaDown ~/ 3};
     } catch (_) {
       return {'up': 0, 'down': 0};
     }
