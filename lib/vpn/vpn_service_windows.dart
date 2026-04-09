@@ -152,6 +152,9 @@ class WindowsVpnService {
       _tunProcess = await Process.start(tun2socks, [
         '-device', 'tun://tunnex',
         '-proxy', 'socks5://tunnex:tunnex@127.0.0.1:${XrayConfigWindows.socksPort}',
+        '-tcp-auto-tuning',
+        '-mtu', '9000',
+        '-loglevel', 'error',
       ], workingDirectory: workDir);
 
       _tunProcess!.stderr.transform(utf8.decoder).listen((l) {
