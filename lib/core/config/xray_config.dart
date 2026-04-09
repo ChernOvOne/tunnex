@@ -10,7 +10,7 @@ class XrayConfig {
     String dnsServer = '8.8.8.8',
   }) {
     return {
-      'log': {'loglevel': 'info'},
+      'log': {'loglevel': 'warning'}, // info is too verbose, slows down
       'inbounds': [
         {
           'tag': 'tun',
@@ -18,26 +18,27 @@ class XrayConfig {
           'protocol': 'tun',
           'settings': {
             'name': 'xray0',
-            'mtu': 1500,
-            'userLevel': 8,
+            'mtu': 9000, // bigger MTU = fewer packets = faster
+            'userLevel': 0,
           },
           'sniffing': {
             'enabled': true,
             'destOverride': ['http', 'tls'],
+            'routeOnly': true, // don't modify destination, just route
           },
         },
       ],
       'outbounds': [
         _buildOutbound(server),
-        {'tag': 'direct', 'protocol': 'freedom',
-          'settings': {'domainStrategy': 'UseIP'}},
+        {'tag': 'direct', 'protocol': 'freedom'},
         {'tag': 'block', 'protocol': 'blackhole'},
       ],
       'dns': {
         'servers': [
           _plainDns(dnsServer),
-          {'address': _plainDns(dnsServer), 'domains': ['geosite:geolocation-!cn']},
         ],
+        'disableCache': false,
+        'queryStrategy': 'UseIP',
       },
       'routing': {
         'domainStrategy': 'AsIs',
@@ -47,6 +48,15 @@ class XrayConfig {
       },
       'stats': {},
       'policy': {
+        'levels': {
+          '0': {
+            'handshake': 4,
+            'connIdle': 300,
+            'uplinkOnly': 1,
+            'downlinkOnly': 1,
+            'bufferSize': 4, // 4KB buffer per connection (default 10KB)
+          },
+        },
         'system': {
           'statsOutboundUplink': true,
           'statsOutboundDownlink': true,
@@ -80,10 +90,17 @@ class XrayConfig {
     return ob;
   }
 
-  /// Add mux if protocol supports it (not with XTLS flow)
+  /// Add mux if protocol supports it
   static void _addMux(Map<String, dynamic> outbound, ServerConfig s) {
-    // Mux is incompatible with XTLS flow
+    // Mux is INCOMPATIBLE with:
+    // - XTLS flow (xtls-rprx-vision)
+    // - Reality security
+    // - Most VLESS configs
+    // Only safe for VMess/Trojan/SS with plain TLS or WS
     if (s.flow.isNotEmpty) return;
+    if (s.security == 'reality') return;
+    if (s.protocol == Protocol.vless) return; // VLESS generally doesn't benefit from mux
+
     outbound['mux'] = {
       'enabled': true,
       'concurrency': 8,

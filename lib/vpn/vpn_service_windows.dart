@@ -56,14 +56,14 @@ class WindowsVpnService {
       if (_lastServerIp != null) {
         await Process.run('route', ['delete', _lastServerIp!, 'mask', '255.255.255.255']).catchError((_){});
       }
-      // Wait for port
+      // Wait for port (max 2s, not 5s)
       final port = mode == WindowsVpnMode.tun
           ? XrayConfigWindows.socksPort : XrayConfigWindows.httpPort;
-      for (int i = 0; i < 10; i++) {
+      for (int i = 0; i < 4; i++) {
         try {
           final s = await ServerSocket.bind('127.0.0.1', port);
           await s.close(); break;
-        } catch (_) { await Future.delayed(const Duration(milliseconds: 500)); }
+        } catch (_) { await Future.delayed(const Duration(milliseconds: 300)); }
       }
       _stopping = false;
 
@@ -87,12 +87,12 @@ class WindowsVpnService {
         }
       });
 
-      // Wait for xray
+      // Wait for xray (fast — 200ms intervals)
       for (int i = 0; i < 10; i++) {
         try {
-          final s = await Socket.connect('127.0.0.1', port, timeout: const Duration(milliseconds: 500));
+          final s = await Socket.connect('127.0.0.1', port, timeout: const Duration(milliseconds: 300));
           s.destroy(); break;
-        } catch (_) { await Future.delayed(const Duration(milliseconds: 500)); }
+        } catch (_) { await Future.delayed(const Duration(milliseconds: 200)); }
       }
       log.writeln('[app] xray started on port $port');
 
@@ -163,12 +163,12 @@ class WindowsVpnService {
         _tunAdapterReady = false;
       });
 
-      // Wait for adapter
-      for (int i = 0; i < 15; i++) {
-        await Future.delayed(const Duration(milliseconds: 500));
+      // Wait for adapter (fast — 200ms intervals)
+      for (int i = 0; i < 20; i++) {
+        await Future.delayed(const Duration(milliseconds: 200));
         final check = await Process.run('netsh', ['interface', 'show', 'interface']);
         if ((check.stdout as String).contains('tunnex')) {
-          log.writeln('[TUN] Adapter ready in ${(i + 1) * 500}ms');
+          log.writeln('[TUN] Adapter ready in ${(i + 1) * 200}ms');
           _tunAdapterReady = true;
           break;
         }
