@@ -356,6 +356,9 @@ class HomeScreen extends ConsumerWidget {
             splitBypass: prefs.splitTunnelBypassMode,
             splitApps: prefs.splitTunnelApps,
             windowsMode: winMode,
+            serverName: server.remarks.isNotEmpty
+                ? server.remarks
+                : '${server.protocol.displayName} • ${server.address}',
           );
     } catch (e) {
       if (context.mounted) {

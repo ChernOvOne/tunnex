@@ -1,12 +1,12 @@
 [Setup]
 AppName=Tunnex VPN
-AppVersion=2.0.0
+AppVersion=2.0.1
 AppPublisher=Tunnex
 AppPublisherURL=https://github.com/ChernOvOne/tunnex
 DefaultDirName={autopf}\Tunnex
 DefaultGroupName=Tunnex
 OutputDir=..\build\installer
-OutputBaseFilename=Tunnex-Setup-v2.0.0
+OutputBaseFilename=Tunnex-Setup-v2.0.1
 Compression=lzma2
 SolidCompression=yes
 SetupIconFile=..\assets\icons\logo.ico

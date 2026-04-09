@@ -62,6 +62,13 @@ class SubscriptionsNotifier extends StateNotifier<List<Subscription>> {
     await repo.add(sub);
     state = await repo.getAll();
 
+    // Auto-select first subscription if none selected
+    final currentSub = _ref.read(selectedSubscriptionIdProvider);
+    if (currentSub == null || state.length == 1) {
+      _ref.read(selectedSubscriptionIdProvider.notifier).state = sub.id;
+      _ref.read(appPreferencesProvider).setSelectedSubscriptionId(sub.id);
+    }
+
     // Auto-fetch
     await refresh(sub.id);
     return null;

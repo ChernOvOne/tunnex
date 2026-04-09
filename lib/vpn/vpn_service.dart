@@ -65,6 +65,7 @@ class VpnStateNotifier extends StateNotifier<VpnState> {
     String core = 'xray',
     bool splitBypass = true,
     List<String> splitApps = const [],
+    String serverName = '',
     String windowsMode = 'tun',
   }) async {
     state = VpnState.connecting;
@@ -86,6 +87,7 @@ class VpnStateNotifier extends StateNotifier<VpnState> {
           'core': core,
           'splitBypass': splitBypass,
           'splitApps': splitApps,
+          'serverName': serverName,
         });
       }
     } catch (e) {

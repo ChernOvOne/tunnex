@@ -51,11 +51,12 @@ class VpnMethodHandler(
                 val core = call.argument<String>("core") ?: "xray"
                 val splitBypass = call.argument<Boolean>("splitBypass") ?: true
                 val splitApps = call.argument<List<String>>("splitApps") ?: emptyList()
+                val serverName = call.argument<String>("serverName") ?: ""
                 if (config == null) {
                     result.error("NO_CONFIG", "Config is required", null)
                     return
                 }
-                startVpn(config, core, splitBypass, splitApps, result)
+                startVpn(config, core, splitBypass, splitApps, serverName, result)
             }
             "stop" -> {
                 stopVpn(result)
@@ -121,7 +122,7 @@ class VpnMethodHandler(
         }
     }
 
-    private fun startVpn(config: String, core: String, splitBypass: Boolean, splitApps: List<String>, result: MethodChannel.Result) {
+    private fun startVpn(config: String, core: String, splitBypass: Boolean, splitApps: List<String>, serverName: String, result: MethodChannel.Result) {
         val prepareIntent = VpnService.prepare(activity)
         if (prepareIntent != null) {
             pendingResult = result
@@ -133,16 +134,17 @@ class VpnMethodHandler(
             return
         }
 
-        doStartVpn(config, core, splitBypass, splitApps)
+        doStartVpn(config, core, splitBypass, splitApps, serverName)
         result.success(null)
     }
 
-    private fun doStartVpn(config: String, core: String, splitBypass: Boolean, splitApps: List<String>) {
+    private fun doStartVpn(config: String, core: String, splitBypass: Boolean, splitApps: List<String>, serverName: String = "") {
         val intent = Intent(activity, TunnexVpnService::class.java).apply {
             putExtra(TunnexVpnService.EXTRA_CONFIG, config)
             putExtra(TunnexVpnService.EXTRA_CORE, core)
             putExtra(TunnexVpnService.EXTRA_SPLIT_BYPASS, splitBypass)
             putStringArrayListExtra(TunnexVpnService.EXTRA_SPLIT_APPS, ArrayList(splitApps))
+            putExtra("serverName", serverName)
         }
         activity.startForegroundService(intent)
     }

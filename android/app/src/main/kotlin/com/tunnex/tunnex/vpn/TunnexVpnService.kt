@@ -77,6 +77,7 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
     private var splitBypass: Boolean = true
     private var splitApps: List<String> = emptyList()
     private var lastConfig: String? = null
+    private var serverDisplayName: String = ""
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
     override fun onCreate() {
@@ -98,6 +99,7 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
         }
         splitBypass = intent.getBooleanExtra(EXTRA_SPLIT_BYPASS, true)
         splitApps = intent.getStringArrayListExtra(EXTRA_SPLIT_APPS) ?: emptyList()
+        serverDisplayName = intent.getStringExtra("serverName") ?: ""
 
         startForeground(NOTIFICATION_ID, buildNotification("Подключение..."))
         setState("connecting")
@@ -138,13 +140,22 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
         controller.startLoop(config, fd.toInt())
         coreController = controller
 
-        val serverName = try {
-            val obj = JSONObject(config)
-            val outbounds = obj.optJSONArray("outbounds")
-            if (outbounds != null && outbounds.length() > 0)
-                outbounds.getJSONObject(0).optString("tag", "Tunnex VPN")
-            else "Tunnex VPN"
-        } catch (_: Exception) { "Tunnex VPN" }
+        val serverName = serverDisplayName.ifEmpty {
+            try {
+                val obj = JSONObject(config)
+                val outbounds = obj.optJSONArray("outbounds")
+                if (outbounds != null && outbounds.length() > 0) {
+                    val proxy = outbounds.getJSONObject(0)
+                    val settings = proxy.optJSONObject("settings")
+                    val vnext = settings?.optJSONArray("vnext")
+                    val servers = settings?.optJSONArray("servers")
+                    val addr = vnext?.getJSONObject(0)?.optString("address", "")
+                        ?: servers?.getJSONObject(0)?.optString("address", "")
+                        ?: ""
+                    if (addr.isNotEmpty()) addr else "Tunnex VPN"
+                } else "Tunnex VPN"
+            } catch (_: Exception) { "Tunnex VPN" }
+        }
 
         lastConfig = config
 
@@ -273,7 +284,7 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
             Intent(this, TunnexVpnService::class.java).apply { action = ACTION_STOP },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(android.R.drawable.ic_lock_lock)
+            .setSmallIcon(com.tunnex.tunnex.R.mipmap.ic_launcher)
             .setContentTitle("Tunnex VPN")
             .setContentText(text)
             .setContentIntent(openPi)
