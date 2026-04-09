@@ -50,11 +50,11 @@ class XrayConfig {
       'policy': {
         'levels': {
           '0': {
-            'handshake': 4,
-            'connIdle': 300,
-            'uplinkOnly': 1,
-            'downlinkOnly': 1,
-            'bufferSize': 4, // 4KB buffer per connection (default 10KB)
+            'handshake': 2,       // faster handshake timeout (default 4)
+            'connIdle': 120,      // close idle connections sooner (default 300)
+            'uplinkOnly': 1,      // close upload-only after 1s
+            'downlinkOnly': 1,    // close download-only after 1s
+            'bufferSize': 2,      // 2KB buffer per connection (saves RAM)
           },
         },
         'system': {

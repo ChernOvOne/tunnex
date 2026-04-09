@@ -155,7 +155,9 @@ class WindowsVpnService {
         '-tcp-auto-tuning',
         '-mtu', '9000',
         '-loglevel', 'error',
-      ], workingDirectory: workDir);
+      ], workingDirectory: workDir,
+         environment: {'GOMAXPROCS': '2'}, // limit CPU cores for Go runtime
+      );
 
       _tunProcess!.stderr.transform(utf8.decoder).listen((l) {
         log.writeln('[tun2socks] $l');

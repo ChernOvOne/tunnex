@@ -56,8 +56,8 @@ class TrafficStatsNotifier extends StateNotifier<TrafficStats> {
     _totalDown = 0;
     state = const TrafficStats();
     _timer?.cancel();
-    // Windows: 3s interval (PowerShell is heavy), Android: 1s
-    final interval = Platform.isWindows ? 3 : 1;
+    // Windows: 5s interval (save CPU), Android: 2s
+    final interval = Platform.isWindows ? 5 : 2;
     _timer = Timer.periodic(Duration(seconds: interval), (_) => _poll());
   }
 
