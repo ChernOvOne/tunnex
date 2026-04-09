@@ -20,7 +20,7 @@ class UpdateInfo {
 }
 
 class AppUpdater {
-  static const _currentVersion = '1.3.0';
+  static const _currentVersion = '1.4.0';
   static const _repo = 'ChernOvOne/tunnex';
 
   static Future<UpdateInfo> checkUpdate() async {
