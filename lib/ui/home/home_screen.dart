@@ -311,15 +311,24 @@ class HomeScreen extends ConsumerWidget {
     final splitMode = sp.getString('windows_split_mode') ?? 'all';
     final vpnDomains = sp.getStringList('vpn_domains') ?? prefs.vpnDomains;
     String winMode = prefs.windowsVpnMode;
-    // Detect real network interface for direct traffic bypass
+    // Detect real network interface (Ethernet, Wi-Fi, WLAN etc.)
     String realIface = 'Ethernet';
     if (Platform.isWindows) {
       try {
         final r = await Process.run('powershell', ['-Command',
-          "(Get-NetAdapter | Where-Object {(\$_.Status -eq 'Up') -and (\$_.Name -notlike 'tunnex*') -and (\$_.Name -notlike '*Clash*')} | Select-Object -First 1).Name"
-        ]);
+          "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+          "(Get-NetAdapter | Where-Object {"
+          "(\$_.Status -eq 'Up') -and "
+          "(\$_.Name -notlike 'tunnex*') -and "
+          "(\$_.Name -notlike '*Clash*') -and "
+          "(\$_.Name -notlike '*Tunnel*') -and "
+          "(\$_.Name -notlike '*tun*') -and "
+          "(\$_.InterfaceDescription -notlike '*Virtual*')"
+          "} | Sort-Object LinkSpeed -Descending | Select-Object -First 1).Name"
+        ], stdoutEncoding: const Utf8Codec(allowMalformed: true));
         final name = (r.stdout as String).trim();
         if (name.isNotEmpty) realIface = name;
+        debugPrint('Detected interface: $realIface');
       } catch (_) {}
     }
     debugPrint('CONNECT: splitMode=$splitMode winMode=$winMode iface=$realIface domains=${vpnDomains.length}');
