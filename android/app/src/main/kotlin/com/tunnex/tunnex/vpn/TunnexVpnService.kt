@@ -284,7 +284,7 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
             Intent(this, TunnexVpnService::class.java).apply { action = ACTION_STOP },
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(com.tunnex.tunnex.R.mipmap.ic_launcher)
+            .setSmallIcon(com.tunnex.tunnex.R.drawable.ic_notification)
             .setContentTitle("Tunnex VPN")
             .setContentText(text)
             .setContentIntent(openPi)
