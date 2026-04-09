@@ -99,50 +99,35 @@ class TrafficStatsNotifier extends StateNotifier<TrafficStats> {
 
   Future<Map<String, int>> _getWindowsStats() async {
     try {
-      // Use netsh (lightweight, no PowerShell overhead)
-      final result = await Process.run('netsh', [
-        'interface', 'ip', 'show', 'interface', 'tunnex'
-      ]).timeout(const Duration(seconds: 2));
+      // Use netstat -e (lightweight, no PowerShell)
+      final result = await Process.run('netstat', ['-e'])
+          .timeout(const Duration(seconds: 2));
 
-      if (result.exitCode != 0) {
-        // Try with wildcard name
-        final r2 = await Process.run('netstat', ['-e']).timeout(const Duration(seconds: 2));
-        if (r2.exitCode == 0) {
-          // Parse netstat -e for total bytes
-          final lines = (r2.stdout as String).split('\n');
-          for (final line in lines) {
-            if (line.contains('Bytes') || line.contains('Байт')) {
-              final nums = RegExp(r'(\d+)').allMatches(line).map((m) => int.parse(m.group(0)!)).toList();
-              if (nums.length >= 2) {
-                final curDown = nums[0];
-                final curUp = nums[1];
-                final deltaUp = curUp > _lastWinUp ? curUp - _lastWinUp : 0;
-                final deltaDown = curDown > _lastWinDown ? curDown - _lastWinDown : 0;
-                _lastWinUp = curUp;
-                _lastWinDown = curDown;
-                // Scale to per-second (interval is 3s)
-                return {'up': deltaUp ~/ 3, 'down': deltaDown ~/ 3};
-              }
+      if (result.exitCode != 0) return {'up': 0, 'down': 0};
+
+      final lines = (result.stdout as String).split('\n');
+      for (final line in lines) {
+        if (line.contains('Bytes') || line.contains('Байт')) {
+          final nums = RegExp(r'(\d+)').allMatches(line)
+              .map((m) => int.parse(m.group(0)!)).toList();
+          if (nums.length >= 2) {
+            final curDown = nums[0];
+            final curUp = nums[1];
+            if (_lastWinUp == 0 && _lastWinDown == 0) {
+              // First poll — just save baseline
+              _lastWinUp = curUp;
+              _lastWinDown = curDown;
+              return {'up': 0, 'down': 0};
             }
+            final deltaUp = curUp > _lastWinUp ? curUp - _lastWinUp : 0;
+            final deltaDown = curDown > _lastWinDown ? curDown - _lastWinDown : 0;
+            _lastWinUp = curUp;
+            _lastWinDown = curDown;
+            return {'up': deltaUp ~/ 3, 'down': deltaDown ~/ 3};
           }
         }
-        return {'up': 0, 'down': 0};
       }
-
-      // Parse interface stats
-      final output = result.stdout as String;
-      final bytesIn = RegExp(r'(?:Bytes In|Входящие байты)[^\d]*(\d+)').firstMatch(output);
-      final bytesOut = RegExp(r'(?:Bytes Out|Исходящие байты)[^\d]*(\d+)').firstMatch(output);
-
-      final curDown = bytesIn != null ? int.parse(bytesIn.group(1)!) : 0;
-      final curUp = bytesOut != null ? int.parse(bytesOut.group(1)!) : 0;
-
-      final deltaUp = curUp > _lastWinUp ? curUp - _lastWinUp : 0;
-      final deltaDown = curDown > _lastWinDown ? curDown - _lastWinDown : 0;
-      _lastWinUp = curUp;
-      _lastWinDown = curDown;
-
-      return {'up': deltaUp ~/ 3, 'down': deltaDown ~/ 3};
+      return {'up': 0, 'down': 0};
     } catch (_) {
       return {'up': 0, 'down': 0};
     }
