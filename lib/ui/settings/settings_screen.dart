@@ -86,13 +86,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         // Domain split tunnel (Windows only — Android uses app-level split)
         if (Platform.isWindows)
           _tile(
-            icon: prefs.windowsSplitMode == 'all' ? Icons.language : Icons.checklist,
+            icon: prefs.windowsSplitMode == 'all' ? Icons.shield : Icons.tune,
             title: prefs.windowsSplitMode == 'all'
-                ? 'Все сайты через VPN'
-                : 'Только выбранные сайты (${prefs.vpnDomains.length})',
+                ? 'Всё через VPN'
+                : 'Только выбранное через VPN',
             subtitle: prefs.windowsSplitMode == 'all'
-                ? 'Все домены проксируются через VPN'
-                : 'Только указанные домены через VPN, остальные напрямую',
+                ? 'Весь трафик защищён'
+                : 'Сайты и приложения по выбору',
             onTap: () async {
               await Navigator.push(context,
                   MaterialPageRoute(builder: (_) => const SplitTunnelWindowsScreen()));

@@ -40,7 +40,7 @@ class _State extends ConsumerState<SplitTunnelWindowsScreen> {
       child: Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
-        title: const Text('Сайты через VPN'),
+        title: const Text('Что идёт через VPN'),
         actions: [
           TextButton(
             onPressed: () { _save(); Navigator.pop(context); },
@@ -53,16 +53,16 @@ class _State extends ConsumerState<SplitTunnelWindowsScreen> {
         children: [
           // Mode selector
           const Text(
-            'Выберите какие сайты будут работать через VPN-сервер, '
-            'а какие напрямую без VPN.',
+            'Выберите что будет работать через VPN — '
+            'сайты, приложения и сервисы.',
             style: TextStyle(fontSize: 13, color: AppColors.textSecondary, height: 1.4),
           ),
           const SizedBox(height: 12),
 
           _modeCard(
-            icon: Icons.public,
-            title: 'Все сайты',
-            subtitle: 'Весь интернет через VPN — максимальная защита',
+            icon: Icons.shield,
+            title: 'Всё через VPN',
+            subtitle: 'Весь интернет-трафик защищён VPN',
             active: !isSelected,
             onTap: () async {
               _isSelected = false;
@@ -74,9 +74,9 @@ class _State extends ConsumerState<SplitTunnelWindowsScreen> {
           ),
           const SizedBox(height: 8),
           _modeCard(
-            icon: Icons.checklist,
-            title: 'Только выбранные',
-            subtitle: 'VPN для выбранных сайтов, остальные напрямую',
+            icon: Icons.tune,
+            title: 'Только выбранное',
+            subtitle: 'VPN только для нужных сайтов и приложений, остальное напрямую',
             active: isSelected,
             onTap: () async {
               _isSelected = true;
@@ -89,87 +89,155 @@ class _State extends ConsumerState<SplitTunnelWindowsScreen> {
 
           if (isSelected) ...[
             const SizedBox(height: 24),
-            const Text(
-              'Добавьте сайты',
-              style: TextStyle(
-                fontSize: 15,
-                fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+            // --- Section 1: Quick add popular services ---
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.star_outline, size: 18, color: AppColors.accent),
+                      SizedBox(width: 8),
+                      Text('Популярные сервисы', style: TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  const Text('Нажмите чтобы добавить или убрать',
+                      style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                  const SizedBox(height: 10),
+                  Wrap(
+                    spacing: 6, runSpacing: 6,
+                    children: [
+                      _quickAdd('YouTube', ['youtube.com', 'googlevideo.com', 'ytimg.com']),
+                      _quickAdd('Instagram', ['instagram.com', 'cdninstagram.com']),
+                      _quickAdd('Twitter/X', ['twitter.com', 'x.com', 'twimg.com']),
+                      _quickAdd('TikTok', ['tiktok.com', 'tiktokcdn.com']),
+                      _quickAdd('Discord', ['discord.com', 'discord.gg', 'discordapp.com']),
+                      _quickAdd('ChatGPT', ['openai.com', 'chatgpt.com']),
+                      _quickAdd('Claude AI', ['claude.ai', 'anthropic.com']),
+                      _quickAdd('Spotify', ['spotify.com', 'scdn.co']),
+                      _quickAdd('Netflix', ['netflix.com', 'nflxvideo.net']),
+                      _quickAdd('Telegram', ['telegram.org', 't.me', 'web.telegram.org']),
+                      _quickAdd('LinkedIn', ['linkedin.com']),
+                      _quickAdd('GitHub', ['github.com', 'githubusercontent.com']),
+                      _quickAdd('Steam', ['steampowered.com', 'steamcommunity.com']),
+                      _quickAdd('Twitch', ['twitch.tv', 'twitchcdn.net']),
+                    ],
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 4),
-            const Text(
-              'Только эти сайты будут открываться через VPN.\n'
-              'Остальной интернет будет работать напрямую — быстрее и без ограничений.',
-              style: TextStyle(fontSize: 12, color: AppColors.textMuted, height: 1.4),
-            ),
             const SizedBox(height: 12),
 
-            // Add domain
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _controller,
-                    decoration: const InputDecoration(
-                      hintText: 'example.com',
-                      hintStyle: TextStyle(color: AppColors.textMuted),
-                      isDense: true,
-                    ),
-                    style: const TextStyle(color: AppColors.textPrimary),
-                    onSubmitted: (_) => _addDomain(),
+            // --- Section 2: Add manually or from app ---
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.add_circle_outline, size: 18, color: AppColors.primary),
+                      SizedBox(width: 8),
+                      Text('Добавить вручную', style: TextStyle(
+                        fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.add_circle, color: AppColors.primary),
-                  onPressed: _addDomain,
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-
-            // Quick add — popular services
-            const Text('Быстрое добавление:', style: TextStyle(fontSize: 12, color: AppColors.textMuted)),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              children: [
-                _quickAdd('YouTube', ['youtube.com', 'googlevideo.com', 'ytimg.com']),
-                _quickAdd('Instagram', ['instagram.com', 'cdninstagram.com']),
-                _quickAdd('Twitter/X', ['twitter.com', 'x.com', 'twimg.com']),
-                _quickAdd('TikTok', ['tiktok.com', 'tiktokcdn.com']),
-                _quickAdd('Discord', ['discord.com', 'discord.gg', 'discordapp.com']),
-                _quickAdd('ChatGPT', ['openai.com', 'chatgpt.com']),
-                _quickAdd('Claude AI', ['claude.ai', 'anthropic.com']),
-                _quickAdd('Spotify', ['spotify.com', 'scdn.co']),
-                _quickAdd('Netflix', ['netflix.com', 'nflxvideo.net']),
-                _quickAdd('Telegram Web', ['telegram.org', 't.me', 'web.telegram.org']),
-                _quickAdd('LinkedIn', ['linkedin.com']),
-                _quickAdd('GitHub', ['github.com', 'githubusercontent.com']),
-              ],
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _controller,
+                          decoration: const InputDecoration(
+                            hintText: 'example.com',
+                            hintStyle: TextStyle(color: AppColors.textMuted),
+                            isDense: true,
+                          ),
+                          style: const TextStyle(color: AppColors.textPrimary),
+                          onSubmitted: (_) => _addDomain(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.add_circle, color: AppColors.primary),
+                        onPressed: _addDomain,
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
             const SizedBox(height: 12),
 
-            // Scan running apps (Windows only)
+            // App tools (Windows only)
             if (Platform.isWindows) ...[
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _scanApps,
-                  icon: const Icon(Icons.radar, size: 18),
-                  label: const Text('Сканировать запущенные приложения'),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.accent,
-                    side: const BorderSide(color: AppColors.surfaceLight),
-                  ),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.apps, size: 18, color: AppColors.warning),
+                        SizedBox(width: 8),
+                        Text('Добавить из приложения', style: TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textPrimary)),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text('Автоматически найдём домены программы',
+                        style: TextStyle(fontSize: 11, color: AppColors.textMuted)),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _scanApps,
+                            icon: const Icon(Icons.radar, size: 16),
+                            label: const Text('Запущенные'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.accent,
+                              side: const BorderSide(color: AppColors.surfaceLight),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: _pickExe,
+                            icon: const Icon(Icons.folder_open, size: 16),
+                            label: const Text('Выбрать .exe'),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: AppColors.primary,
+                              side: const BorderSide(color: AppColors.surfaceLight),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
               const SizedBox(height: 12),
             ],
 
-            // Domain list
+            // --- Section 4: Active list ---
             Text(
               '${_domains.length} доменов',
               style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
@@ -401,6 +469,94 @@ class _State extends ConsumerState<SplitTunnelWindowsScreen> {
         ],
       ),
     );
+  }
+
+  void _pickExe() async {
+    // Open file picker via PowerShell
+    try {
+      final result = await Process.run('powershell', ['-Command',
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+        "Add-Type -AssemblyName System.Windows.Forms; "
+        "\$d = New-Object System.Windows.Forms.OpenFileDialog; "
+        "\$d.Filter = 'Applications (*.exe)|*.exe'; "
+        "\$d.Title = 'Выберите приложение'; "
+        "if (\$d.ShowDialog() -eq 'OK') { \$d.FileName }"
+      ]);
+
+      final exePath = (result.stdout as String).trim();
+      if (exePath.isEmpty || !exePath.endsWith('.exe')) return;
+
+      // Extract exe name
+      final exeName = exePath.split('\\').last.replaceAll('.exe', '').toLowerCase();
+
+      // Check known mapping
+      final known = AppScannerWindows.knownApps;
+      if (known.containsKey(exeName) && known[exeName]!.isNotEmpty) {
+        setState(() {
+          for (final d in known[exeName]!) {
+            if (!_domains.contains(d)) _domains.add(d);
+          }
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Добавлено: ${known[exeName]!.join(", ")}',
+                style: const TextStyle(color: AppColors.textPrimary)),
+            backgroundColor: AppColors.surface,
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+        return;
+      }
+
+      // Unknown app — try to find running process and scan
+      final psResult = await Process.run('powershell', ['-Command',
+        "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
+        "(Get-Process -Name '$exeName' -ErrorAction SilentlyContinue | Select-Object -First 1).Id"
+      ]);
+      final pidStr = (psResult.stdout as String).trim();
+      final pid = int.tryParse(pidStr);
+
+      if (pid != null && pid > 0) {
+        // Scan connections
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text('Сканируем соединения...'),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 1),
+          ));
+        }
+        final domains = await AppScannerWindows.scanProcessConnections(pid);
+        if (domains.isNotEmpty) {
+          setState(() {
+            for (final d in domains) {
+              if (!_domains.contains(d)) _domains.add(d);
+            }
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text('Найдено: ${domains.join(", ")}',
+                  style: const TextStyle(color: AppColors.textPrimary)),
+              backgroundColor: AppColors.surface,
+              behavior: SnackBarBehavior.floating,
+            ));
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Запустите приложение и попробуйте снова'),
+              behavior: SnackBarBehavior.floating,
+            ));
+          }
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('$exeName не запущен. Запустите его и попробуйте снова.'),
+            behavior: SnackBarBehavior.floating,
+          ));
+        }
+      }
+    } catch (_) {}
   }
 
   void _addDomain() {
