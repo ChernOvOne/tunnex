@@ -384,7 +384,28 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
     }
 
     override fun onRevoke() { stopVpn(); super.onRevoke() }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        // App swiped from recents — restart service if was connected
+        if (currentState == "connected" && lastConfig != null) {
+            Log.i(TAG, "Task removed, scheduling restart")
+            val restartIntent = Intent(this, TunnexVpnService::class.java).apply {
+                putExtra(EXTRA_CONFIG, lastConfig)
+            }
+            startForegroundService(restartIntent)
+        }
+        super.onTaskRemoved(rootIntent)
+    }
+
     override fun onDestroy() {
+        // If was connected, try to restart
+        if (currentState == "connected" && lastConfig != null) {
+            Log.i(TAG, "Service destroyed while connected, restarting")
+            val restartIntent = Intent(this, TunnexVpnService::class.java).apply {
+                putExtra(EXTRA_CONFIG, lastConfig)
+            }
+            try { startForegroundService(restartIntent) } catch (_: Exception) {}
+        }
         instance = null; scope.cancel(); releaseLocks()
         vpnInterface?.close(); vpnInterface = null
         super.onDestroy()

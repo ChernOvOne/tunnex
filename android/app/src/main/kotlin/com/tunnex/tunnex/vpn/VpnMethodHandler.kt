@@ -72,6 +72,19 @@ class VpnMethodHandler(
             "requestPermission" -> {
                 requestVpnPermission(result)
             }
+            "requestBatteryOptimization" -> {
+                try {
+                    val pm = activity.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager
+                    if (!pm.isIgnoringBatteryOptimizations(activity.packageName)) {
+                        val intent = android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                        intent.data = android.net.Uri.parse("package:${activity.packageName}")
+                        activity.startActivity(intent)
+                    }
+                    result.success(true)
+                } catch (e: Exception) {
+                    result.success(false)
+                }
+            }
             else -> result.notImplemented()
         }
     }

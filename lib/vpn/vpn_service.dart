@@ -78,6 +78,9 @@ class VpnStateNotifier extends StateNotifier<VpnState> {
             onStateChanged: (s) => state = _parseState(s),
             mode: mode);
       } else {
+        // Request battery optimization exemption (first time)
+        try { await _channel.invokeMethod('requestBatteryOptimization'); } catch (_) {}
+
         await _channel.invokeMethod('start', {
           'config': configJson,
           'core': core,
