@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 
 import '../../core/ping/server_ping.dart';
+import '../../core/updater/app_updater.dart';
 import '../../data/preferences/app_preferences.dart';
 import '../theme/app_theme.dart';
 import 'split_tunnel_screen.dart';
@@ -180,9 +181,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         const SizedBox(height: 8),
         _tile(
           icon: Icons.info_outline,
-          title: 'Tunnex',
-          subtitle: 'v1.0.0 • xray-core',
+          title: 'Tunnex v${AppUpdater.currentVersion}',
+          subtitle: 'xray-core • Flutter',
           onTap: () {},
+        ),
+        const SizedBox(height: 6),
+        _tile(
+          icon: Icons.system_update,
+          title: 'Проверить обновления',
+          subtitle: 'Текущая версия: ${AppUpdater.currentVersion}',
+          onTap: () => _checkUpdate(context),
         ),
       ],
       ),
@@ -456,6 +464,131 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         )).toList(),
       ),
     );
+  }
+
+  void _checkUpdate(BuildContext context) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Проверяем обновления...'),
+          behavior: SnackBarBehavior.floating, duration: Duration(seconds: 1)),
+    );
+
+    final update = await AppUpdater.checkUpdate();
+
+    if (!mounted) return;
+
+    if (!update.hasUpdate) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(children: [
+            const Icon(Icons.check_circle, color: AppColors.success, size: 20),
+            const SizedBox(width: 8),
+            Text('У вас последняя версия (${AppUpdater.currentVersion})',
+                style: const TextStyle(color: AppColors.textPrimary)),
+          ]),
+          backgroundColor: AppColors.surface,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    // Show update dialog
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        title: Row(children: [
+          const Icon(Icons.system_update, color: AppColors.accent),
+          const SizedBox(width: 10),
+          Text('Обновление v${update.version}'),
+        ]),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Текущая: ${AppUpdater.currentVersion} → Новая: ${update.version}',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+            const SizedBox(height: 12),
+            Text(update.body, style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+                maxLines: 10, overflow: TextOverflow.ellipsis),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Позже'),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.download, size: 18),
+            label: const Text('Обновить'),
+            onPressed: () {
+              Navigator.pop(ctx);
+              _downloadUpdate(context, update);
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _downloadUpdate(BuildContext context, UpdateInfo update) async {
+    // Show progress
+    double progress = 0;
+    late StateSetter dialogSetState;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) {
+          dialogSetState = setState;
+          return AlertDialog(
+            backgroundColor: AppColors.surface,
+            title: const Text('Загрузка обновления'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                LinearProgressIndicator(
+                  value: progress,
+                  backgroundColor: AppColors.surfaceLight,
+                  valueColor: const AlwaysStoppedAnimation(AppColors.primary),
+                ),
+                const SizedBox(height: 8),
+                Text('${(progress * 100).toInt()}%',
+                    style: const TextStyle(color: AppColors.textSecondary)),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+
+    final filePath = await AppUpdater.download(
+      update.downloadUrl,
+      onProgress: (received, total) {
+        if (total > 0) {
+          try {
+            dialogSetState(() => progress = received / total);
+          } catch (_) {}
+        }
+      },
+    );
+
+    if (!mounted) return;
+    Navigator.pop(context); // close progress
+
+    if (filePath == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ошибка загрузки'), behavior: SnackBarBehavior.floating),
+      );
+      return;
+    }
+
+    // Install
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Устанавливаем...'), behavior: SnackBarBehavior.floating),
+    );
+    await AppUpdater.installAndRestart(filePath);
   }
 
   void _showPingMethodDialog(BuildContext context, AppPreferences prefs) {

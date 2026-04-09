@@ -8,6 +8,7 @@ import 'package:system_tray/system_tray.dart';
 import 'package:window_manager/window_manager.dart';
 
 import 'core/deeplink/deeplink_handler.dart';
+import 'core/updater/app_updater.dart';
 import 'vpn/auto_failover.dart';
 import 'vpn/vpn_service.dart';
 import 'data/preferences/app_preferences.dart';
@@ -60,6 +61,33 @@ class _TunnexAppState extends ConsumerState<TunnexApp> with WindowListener {
     super.initState();
     ref.read(deeplinkHandlerProvider).init();
     ref.read(autoFailoverProvider);
+
+    // Check for updates on startup (delayed)
+    Future.delayed(const Duration(seconds: 5), () async {
+      final update = await AppUpdater.checkUpdate();
+      if (update.hasUpdate && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(children: [
+              const Icon(Icons.system_update, color: AppColors.accent, size: 20),
+              const SizedBox(width: 8),
+              Text('Доступно обновление v${update.version}',
+                  style: const TextStyle(color: AppColors.textPrimary)),
+            ]),
+            backgroundColor: AppColors.surface,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+            action: SnackBarAction(
+              label: 'Обновить',
+              textColor: AppColors.accent,
+              onPressed: () {
+                // Navigate to settings
+              },
+            ),
+          ),
+        );
+      }
+    });
 
     if (Platform.isWindows) {
       windowManager.addListener(this);

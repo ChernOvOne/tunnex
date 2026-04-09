@@ -154,6 +154,9 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
             registerNetworkCallback()
         }
 
+        // Start keepalive — detect freeze/sleep and restart core
+        startKeepalive()
+
         // Save state for boot restore
         getSharedPreferences("tunnex_vpn", MODE_PRIVATE).edit()
             .putBoolean("was_connected", true)
@@ -198,6 +201,7 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
 
     fun stopVpn() {
         setState("disconnecting")
+        keepaliveJob?.cancel()
         unregisterNetworkCallback()
         scope.launch {
             try {
@@ -297,6 +301,30 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
 
     // Lifecycle
     // --- Network change detection (fixes Telegram after sleep) ---
+
+    // --- Keepalive: detect device sleep/freeze and restart core ---
+
+    private var keepaliveJob: Job? = null
+
+    private fun startKeepalive() {
+        keepaliveJob?.cancel()
+        keepaliveJob = scope.launch {
+            var lastTickTime = System.currentTimeMillis()
+            while (isActive && currentState == "connected") {
+                delay(5000) // check every 5s
+                val now = System.currentTimeMillis()
+                val elapsed = now - lastTickTime
+                lastTickTime = now
+
+                // If >15s passed since last tick — device was frozen/sleeping
+                if (elapsed > 15000) {
+                    Log.i(TAG, "Device was frozen for ${elapsed / 1000}s, restarting core")
+                    restartCore()
+                    break // restartCore will start new keepalive
+                }
+            }
+        }
+    }
 
     private fun registerNetworkCallback() {
         if (networkCallback != null) return
