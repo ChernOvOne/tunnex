@@ -16,17 +16,22 @@ class BootReceiver : BroadcastReceiver() {
 
         if (!wasConnected || lastConfig == null) return
 
-        // Check VPN permission is still granted
-        if (VpnService.prepare(context) != null) {
-            Log.w("TunnexBoot", "VPN permission not granted, skipping auto-start")
+        // Check Flutter auto_connect setting
+        val flutterPrefs = context.getSharedPreferences("FlutterSharedPreferences", Context.MODE_PRIVATE)
+        val autoConnect = flutterPrefs.getBoolean("flutter.auto_connect", false)
+        if (!autoConnect) {
+            Log.i("TunnexBoot", "Auto-connect disabled in settings")
             return
         }
 
-        Log.i("TunnexBoot", "Restoring VPN connection after boot")
-        val lastCore = prefs.getString("last_core", "xray")
+        if (VpnService.prepare(context) != null) {
+            Log.w("TunnexBoot", "VPN permission not granted")
+            return
+        }
+
+        Log.i("TunnexBoot", "Auto-starting VPN after boot")
         val serviceIntent = Intent(context, TunnexVpnService::class.java).apply {
             putExtra(TunnexVpnService.EXTRA_CONFIG, lastConfig)
-            putExtra(TunnexVpnService.EXTRA_CORE, lastCore)
         }
         context.startForegroundService(serviceIntent)
     }

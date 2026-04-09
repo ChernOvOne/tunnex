@@ -60,20 +60,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         if (!Platform.isWindows) ...[
           _tile(
             icon: prefs.splitTunnelBypassMode ? Icons.public : Icons.app_shortcut,
-            title: prefs.splitTunnelBypassMode ? 'Все приложения' : 'Только выбранные приложения',
-            subtitle: prefs.splitTunnelBypassMode
+            title: prefs.splitTunnelBypassMode
                 ? 'Все приложения через VPN'
-                : '${prefs.splitTunnelApps.length} приложений через VPN',
+                : 'Выбранные приложения',
+            subtitle: prefs.splitTunnelBypassMode
+                ? 'Весь трафик на устройстве защищён'
+                : 'Только выбранные приложения через VPN',
             onTap: () => _showVpnModeDialog(context, prefs),
           ),
           const SizedBox(height: 6),
           if (!prefs.splitTunnelBypassMode)
             _tile(
               icon: Icons.checklist_outlined,
-              title: 'Выбрать приложения',
-              subtitle: 'Какие приложения идут через VPN',
-              onTap: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const SplitTunnelScreen())),
+              title: 'Изменить список',
+              subtitle: '${prefs.splitTunnelApps.length} приложений выбрано',
+              onTap: () async {
+                await Navigator.push(context,
+                    MaterialPageRoute(builder: (_) => const SplitTunnelScreen()));
+                setState(() {});
+              },
             ),
           const SizedBox(height: 6),
         ],

@@ -11,6 +11,9 @@ import '../data/providers.dart';
 import '../data/repository/server_repository.dart';
 import 'vpn_service.dart';
 
+/// Event notification for UI
+final failoverEventProvider = StateProvider<String?>((ref) => null);
+
 final autoFailoverProvider = Provider<AutoFailover>((ref) {
   final failover = AutoFailover(ref);
 
@@ -61,9 +64,13 @@ class AutoFailover {
 
     _failCount++;
     debugPrint('AutoFailover: health check failed ($_failCount/$_maxFails)');
+    _ref.read(failoverEventProvider.notifier).state =
+        'Проверка соединения... ($_failCount/$_maxFails)';
 
     if (_failCount >= _maxFails) {
       _failCount = 0;
+      _ref.read(failoverEventProvider.notifier).state =
+          'Сервер недоступен. Переключаемся...';
       await _switchToNextServer();
     }
   }
@@ -109,7 +116,10 @@ class AutoFailover {
 
     final bestId = alive.first.key;
     final best = others.firstWhere((s) => s.id == bestId);
-    debugPrint('AutoFailover: switching to ${best.remarks} (${alive.first.value}ms)');
+    final serverName = best.remarks.isNotEmpty ? best.remarks : best.address;
+    debugPrint('AutoFailover: switching to $serverName (${alive.first.value}ms)');
+    _ref.read(failoverEventProvider.notifier).state =
+        'Переключено на $serverName (${alive.first.value}мс)';
 
     // Update selection
     _ref.read(selectedServerIdProvider.notifier).state = bestId;

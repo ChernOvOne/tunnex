@@ -1,20 +1,22 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../vpn/auto_failover.dart';
 import 'home/home_screen.dart';
 import 'settings/settings_screen.dart';
 import 'subscription/subscription_screen.dart';
 import 'theme/app_theme.dart';
 
-class AppShell extends StatefulWidget {
+class AppShell extends ConsumerStatefulWidget {
   const AppShell({super.key});
 
   @override
-  State<AppShell> createState() => _AppShellState();
+  ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends State<AppShell> {
+class _AppShellState extends ConsumerState<AppShell> {
   int _currentIndex = 0;
 
   final _screens = const [
@@ -27,6 +29,29 @@ class _AppShellState extends State<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    // Listen for failover events
+    ref.listen(failoverEventProvider, (prev, next) {
+      if (next != null && context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  next.contains('Переключено') ? Icons.swap_horiz : Icons.warning_amber,
+                  color: next.contains('Переключено') ? AppColors.accent : AppColors.warning,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Expanded(child: Text(next, style: const TextStyle(color: AppColors.textPrimary))),
+              ],
+            ),
+            backgroundColor: AppColors.surface,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    });
     final width = MediaQuery.of(context).size.width;
 
     // Desktop: side navigation rail for wide screens

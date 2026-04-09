@@ -154,9 +154,10 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
             registerNetworkCallback()
         }
 
-        // Only save connection state, NOT the config (contains server credentials)
+        // Save state for boot restore
         getSharedPreferences("tunnex_vpn", MODE_PRIVATE).edit()
             .putBoolean("was_connected", true)
+            .putString("last_config", lastConfig)
             .apply()
     }
 
@@ -300,11 +301,14 @@ class TunnexVpnService : VpnService(), CoreCallbackHandler {
     private fun registerNetworkCallback() {
         if (networkCallback != null) return
         val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val registerTime = System.currentTimeMillis()
         networkCallback = object : ConnectivityManager.NetworkCallback() {
-            private var lastRestartTime = 0L
+            private var lastRestartTime = registerTime
             override fun onAvailable(network: Network) {
                 val now = System.currentTimeMillis()
-                if (now - lastRestartTime < 30000) return // debounce 30s
+                // Ignore first 5 seconds (TUN creation triggers onAvailable)
+                if (now - registerTime < 5000) return
+                if (now - lastRestartTime < 30000) return
                 if (currentState != "connected") return
                 lastRestartTime = now
                 Log.i(TAG, "Network changed, restarting core")
