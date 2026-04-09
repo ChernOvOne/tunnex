@@ -36,14 +36,19 @@ class XrayConfig {
       'dns': {
         'servers': [
           _plainDns(dnsServer),
+          '1.1.1.1', // fast fallback
         ],
         'disableCache': false,
-        'queryStrategy': 'UseIP',
+        'queryStrategy': 'UseIPv4', // IPv4 only — faster, no IPv6 leak
+        'tag': 'dns-internal',
       },
       'routing': {
         'domainStrategy': 'AsIs',
         'rules': [
+          // Private IPs → direct
           {'type': 'field', 'outboundTag': 'direct', 'ip': ['geoip:private']},
+          // Block all IPv6 to prevent leaks
+          {'type': 'field', 'outboundTag': 'block', 'ip': ['::0/0']},
         ],
       },
       'stats': {},
