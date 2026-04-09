@@ -73,7 +73,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _tile(
               icon: Icons.checklist_outlined,
               title: 'Изменить список',
-              subtitle: '${prefs.splitTunnelApps.length} приложений выбрано',
+              subtitle: 'Выберите приложения для VPN',
               onTap: () async {
                 await Navigator.push(context,
                     MaterialPageRoute(builder: (_) => const SplitTunnelScreen()));

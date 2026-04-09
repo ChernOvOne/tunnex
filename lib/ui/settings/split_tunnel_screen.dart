@@ -1,3 +1,6 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,20 +8,20 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/preferences/app_preferences.dart';
 import '../theme/app_theme.dart';
 
-/// Installed app info fetched from platform
 class AppInfo {
   final String packageName;
   final String appName;
   final bool isSystem;
+  final Uint8List? icon;
 
   const AppInfo({
     required this.packageName,
     required this.appName,
     this.isSystem = false,
+    this.icon,
   });
 }
 
-/// Provider to fetch installed apps from platform
 final installedAppsProvider = FutureProvider<List<AppInfo>>((ref) async {
   const channel = MethodChannel('com.tunnex/apps');
   try {
@@ -26,10 +29,16 @@ final installedAppsProvider = FutureProvider<List<AppInfo>>((ref) async {
     if (result == null) return [];
     return result.map((item) {
       final map = Map<String, dynamic>.from(item as Map);
+      Uint8List? iconBytes;
+      final iconStr = map['icon'] as String? ?? '';
+      if (iconStr.isNotEmpty) {
+        try { iconBytes = base64Decode(iconStr); } catch (_) {}
+      }
       return AppInfo(
         packageName: map['packageName'] as String,
         appName: map['appName'] as String,
         isSystem: map['isSystem'] as bool? ?? false,
+        icon: iconBytes,
       );
     }).toList()
       ..sort((a, b) => a.appName.toLowerCase().compareTo(b.appName.toLowerCase()));
@@ -176,14 +185,15 @@ class _SplitTunnelScreenState extends ConsumerState<SplitTunnelScreen> {
 
   Widget _appTile(AppInfo app, bool isSelected) {
     return ListTile(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: AppColors.surfaceLight,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: const Icon(Icons.android, color: AppColors.textMuted),
+      leading: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: app.icon != null
+            ? Image.memory(app.icon!, width: 40, height: 40, fit: BoxFit.cover)
+            : Container(
+                width: 40, height: 40,
+                color: AppColors.surfaceLight,
+                child: const Icon(Icons.android, color: AppColors.textMuted),
+              ),
       ),
       title: Text(
         app.appName,
