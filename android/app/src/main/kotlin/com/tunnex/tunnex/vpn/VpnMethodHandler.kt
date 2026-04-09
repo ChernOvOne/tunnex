@@ -72,6 +72,38 @@ class VpnMethodHandler(
             "requestPermission" -> {
                 requestVpnPermission(result)
             }
+            "installApk" -> {
+                val path = call.argument<String>("path")
+                if (path != null) {
+                    try {
+                        val file = java.io.File(path)
+                        val uri = androidx.core.content.FileProvider.getUriForFile(
+                            activity, "${activity.packageName}.fileprovider", file)
+                        val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                            setDataAndType(uri, "application/vnd.android.package-archive")
+                            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+                                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+                        }
+                        activity.startActivity(intent)
+                        result.success(true)
+                    } catch (e: Exception) {
+                        // Fallback: open file directly
+                        try {
+                            val uri = android.net.Uri.fromFile(java.io.File(path))
+                            val intent = android.content.Intent(android.content.Intent.ACTION_VIEW).apply {
+                                setDataAndType(uri, "application/vnd.android.package-archive")
+                                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
+                            }
+                            activity.startActivity(intent)
+                            result.success(true)
+                        } catch (e2: Exception) {
+                            result.error("INSTALL_FAILED", e2.message, null)
+                        }
+                    }
+                } else {
+                    result.error("NO_PATH", "Path required", null)
+                }
+            }
             "requestBatteryOptimization" -> {
                 try {
                     val pm = activity.getSystemService(android.content.Context.POWER_SERVICE) as android.os.PowerManager

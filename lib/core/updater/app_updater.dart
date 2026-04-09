@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
 class UpdateInfo {
@@ -20,7 +21,7 @@ class UpdateInfo {
 }
 
 class AppUpdater {
-  static const _currentVersion = '1.4.0';
+  static const _currentVersion = '2.0.0';
   static const _repo = 'ChernOvOne/tunnex';
 
   static Future<UpdateInfo> checkUpdate() async {
@@ -93,12 +94,15 @@ class AppUpdater {
 
   static Future<void> installAndRestart(String filePath) async {
     if (Platform.isWindows) {
-      // Run installer and exit
       await Process.start(filePath, ['/SILENT'], mode: ProcessStartMode.detached);
       exit(0);
     } else if (Platform.isAndroid) {
-      // Open APK for install via intent
-      // This needs platform channel
+      try {
+        const channel = MethodChannel('com.tunnex/vpn');
+        await channel.invokeMethod('installApk', {'path': filePath});
+      } catch (e) {
+        debugPrint('Install APK failed: $e');
+      }
     }
   }
 
