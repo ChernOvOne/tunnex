@@ -340,13 +340,34 @@ class HomeScreen extends ConsumerWidget {
       );
     }
 
-    ref.read(vpnStateProvider.notifier).connect(
-          jsonEncode(config),
-          core: 'xray',
-          splitBypass: prefs.splitTunnelBypassMode,
-          splitApps: prefs.splitTunnelApps,
-          windowsMode: winMode,
+    try {
+      await ref.read(vpnStateProvider.notifier).connect(
+            jsonEncode(config),
+            core: 'xray',
+            splitBypass: prefs.splitTunnelBypassMode,
+            splitApps: prefs.splitTunnelApps,
+            windowsMode: winMode,
+          );
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                const Icon(Icons.error_outline, color: AppColors.error, size: 20),
+                const SizedBox(width: 8),
+                Expanded(child: Text('Ошибка: $e',
+                    style: const TextStyle(color: AppColors.textPrimary),
+                    maxLines: 3, overflow: TextOverflow.ellipsis)),
+              ],
+            ),
+            backgroundColor: AppColors.surface,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 5),
+          ),
         );
+      }
+    }
   }
 
   Widget _buildDesktopLayout(BuildContext context, WidgetRef ref, VpnState vpnState, dynamic activeSub, List<ServerConfig> servers, String? selectedId, ServerConfig? selectedServer) {

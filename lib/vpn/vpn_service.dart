@@ -10,12 +10,18 @@ import 'vpn_service_windows.dart';
 
 enum VpnState { disconnected, connecting, connected, disconnecting }
 
+/// Last VPN error for UI display
+final vpnErrorProvider = StateProvider<String?>((ref) => null);
+
 final vpnStateProvider =
     StateNotifierProvider<VpnStateNotifier, VpnState>((ref) {
   return VpnStateNotifier();
 });
 
 class VpnStateNotifier extends StateNotifier<VpnState> {
+  String? _lastError;
+  String? get lastError => _lastError;
+
   // Android
   static const _channel = MethodChannel('com.tunnex/vpn');
   static const _eventChannel = EventChannel('com.tunnex/vpn_state');
@@ -80,6 +86,8 @@ class VpnStateNotifier extends StateNotifier<VpnState> {
         });
       }
     } catch (e) {
+      _lastError = e.toString();
+      debugPrint('VPN error: $_lastError');
       state = VpnState.disconnected;
       rethrow;
     }
