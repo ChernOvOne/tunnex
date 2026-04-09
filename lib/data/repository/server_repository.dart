@@ -98,8 +98,20 @@ class ServerRepository {
   Future<void> replaceForSubscription(
       String subscriptionId, List<ServerConfig> newServers) async {
     await _ensureLoaded();
+    final oldServers = _servers.where((s) => s.subscriptionId == subscriptionId).toList();
+
+    // Preserve IDs for servers with same address:port (keeps selectedServerId valid)
+    final preserved = newServers.map((ns) {
+      final match = oldServers.where((os) =>
+          os.address == ns.address && os.port == ns.port).firstOrNull;
+      if (match != null) {
+        return ns.copyWith(id: match.id, testResult: match.testResult);
+      }
+      return ns;
+    }).toList();
+
     _servers.removeWhere((s) => s.subscriptionId == subscriptionId);
-    _servers.addAll(newServers);
+    _servers.addAll(preserved);
     await _save();
   }
 }
