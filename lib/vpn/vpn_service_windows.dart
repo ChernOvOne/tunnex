@@ -174,7 +174,8 @@ class WindowsVpnService {
         }
       }
       if (!_tunAdapterReady) {
-        throw Exception('TUN adapter failed');
+        log.writeln('[TUN] FAILED — adapter not created. Run as Administrator!');
+        throw Exception('TUN adapter failed — run as Administrator');
       }
     }
 
@@ -185,10 +186,18 @@ class WindowsVpnService {
         log.writeln('[TUN] Configuring routes...');
 
         // Get default gateway (cache it)
-        if (_defaultGateway == null) {
+        if (_defaultGateway == null || _defaultGateway!.isEmpty) {
+          // Method 1: PowerShell Get-NetRoute
           final gwResult = await Process.run('powershell', ['-Command',
-            '(Get-NetRoute -DestinationPrefix "0.0.0.0/0" | Sort-Object RouteMetric | Select-Object -First 1).NextHop']);
+            '(Get-NetRoute -DestinationPrefix "0.0.0.0/0" -ErrorAction SilentlyContinue | Where-Object {\$_.NextHop -ne "0.0.0.0"} | Sort-Object RouteMetric | Select-Object -First 1).NextHop']);
           _defaultGateway = (gwResult.stdout as String).trim();
+
+          // Method 2: ipconfig fallback
+          if (_defaultGateway == null || _defaultGateway!.isEmpty || _defaultGateway == '::') {
+            final ipcResult = await Process.run('ipconfig', []);
+            final match = RegExp(r'(?:Default Gateway|Основной шлюз)[.\s]*:\s*([\d.]+)').firstMatch(ipcResult.stdout as String);
+            if (match != null) _defaultGateway = match.group(1);
+          }
         }
         final defaultGw = _defaultGateway!;
         log.writeln('[TUN] Gateway: $defaultGw');
